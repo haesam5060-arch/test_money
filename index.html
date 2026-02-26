@@ -1,0 +1,2403 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주식 매매 시뮬레이터 — 벤포드 법칙 + 기술적 분석</title>
+<script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0f0f1a; color:#d1d4dc; font-family:'Pretendard','Apple SD Gothic Neo',sans-serif; line-height:1.6; }
+a { color:#5b9bd5; }
+
+.container { max-width:1400px; margin:0 auto; padding:20px; }
+
+/* Header */
+header { text-align:center; padding:30px 0 20px; border-bottom:1px solid #2a2a3e; margin-bottom:30px; }
+
+/* Global optimizing toast — overlays upload area */
+#uploadAreaWrap { position:relative; }
+#globalOptToast { display:none; position:absolute; inset:0; z-index:10; background:rgba(16,16,30,0.88); border-radius:12px; flex-direction:column; align-items:center; justify-content:center; gap:10px; pointer-events:none; }
+#globalOptToast.active { display:flex; }
+#globalOptToast .toast-text { font-size:20px; font-weight:700; color:#f5c842; letter-spacing:0.5px; }
+@keyframes toast-pulse { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+#globalOptToast .toast-text { animation:toast-pulse 0.9s ease-in-out infinite; }
+#globalOptToast .toast-sub { font-size:13px; color:#aaa; }
+header h1 { font-size:28px; color:#e0e0e0; margin-bottom:6px; }
+header p { color:#888; font-size:14px; }
+
+/* Cards */
+.card { background:#1a1a2e; border:1px solid #2a2a3e; border-radius:12px; padding:24px; margin-bottom:20px; }
+.card h2 { font-size:18px; color:#fff; margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid #2a2a3e; }
+.card h3 { font-size:15px; color:#aaa; margin:16px 0 8px; }
+
+/* Upload Area */
+.upload-area { border:2px dashed #3a3a5e; border-radius:12px; padding:28px; text-align:center; cursor:pointer; transition:all .2s; }
+.upload-area:hover, .upload-area.dragover { border-color:#5b9bd5; background:#1e1e35; }
+.upload-area .icon { font-size:34px; margin-bottom:8px; }
+.upload-area p { color:#888; }
+.upload-area .filename { color:#5b9bd5; font-weight:600; margin-top:8px; }
+#fileInput { display:none; }
+
+/* Instructions */
+.instructions { background:#16162a; border:1px solid #252540; border-radius:8px; margin-top:16px; font-size:13px; color:#999; overflow:hidden; }
+.instructions-toggle { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; cursor:pointer; user-select:none; color:#888; font-size:13px; }
+.instructions-toggle:hover { background:#1e1e38; }
+.instructions-toggle .toggle-arrow { font-size:10px; transition:transform 0.25s; color:#555; }
+.instructions-toggle.open .toggle-arrow { transform:rotate(180deg); }
+.instructions-body { padding:0 20px 16px; display:none; }
+.instructions-body.open { display:block; }
+.instructions code { background:#252540; padding:2px 8px; border-radius:4px; color:#7ec8e3; font-size:12px; word-break:break-all; }
+.instructions ol { padding-left:20px; }
+.instructions li { margin:8px 0; }
+.instructions table { width:100%; margin:10px 0; border-collapse:collapse; }
+.instructions td, .instructions th { padding:4px 10px; border:1px solid #333; font-size:12px; }
+.instructions th { background:#252540; color:#aaa; }
+
+/* Parameters */
+.params { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+.param-group label { display:block; font-size:12px; color:#888; margin-bottom:4px; }
+.param-group input, .param-group select { width:100%; background:#252540; border:1px solid #3a3a5e; color:#fff; padding:8px 12px; border-radius:6px; font-size:14px; }
+.param-group input:focus, .param-group select:focus { outline:none; border-color:#5b9bd5; }
+.param-group select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; cursor:pointer; }
+
+/* Tooltip */
+.tooltip-wrap { position:relative; display:inline-block; margin-left:4px; vertical-align:middle; }
+.tooltip-icon { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; background:#3a3a5e; color:#aaa; border-radius:50%; font-size:11px; font-weight:700; cursor:help; transition:all .2s; }
+.tooltip-icon:hover { background:#5b9bd5; color:#fff; }
+.tooltip-content { display:none; position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); width:320px; background:#252540; border:1px solid #3a3a5e; border-radius:8px; padding:12px 14px; font-size:12px; color:#ccc; line-height:1.5; z-index:1000; box-shadow:0 4px 20px rgba(0,0,0,.5); text-align:left; white-space:normal; }
+.tooltip-content::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#3a3a5e; }
+.tooltip-wrap:hover .tooltip-content { display:block; }
+.tooltip-content .tip-title { color:#5b9bd5; font-weight:600; margin-bottom:4px; }
+.tooltip-content .tip-example { background:#1a1a2e; padding:6px 8px; border-radius:4px; margin-top:6px; color:#7ec8e3; font-size:11px; }
+.tooltip-content .tip-recommend { color:#f5c842; font-size:11px; margin-top:6px; }
+
+/* Buttons */
+.btn { padding:12px 32px; border:none; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; transition:all .2s; }
+.btn-primary { background:linear-gradient(135deg,#5b9bd5,#3a7bd5); color:#fff; }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 15px rgba(59,123,213,.4); }
+.btn-primary:disabled { opacity:.4; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-sm { padding:6px 16px; font-size:13px; border-radius:6px; }
+.btn-outline { background:transparent; border:1px solid #3a3a5e; color:#aaa; }
+.btn-outline:hover { border-color:#5b9bd5; color:#5b9bd5; }
+.btn-outline.active { border-color:#5b9bd5; color:#5b9bd5; background:rgba(91,155,213,.1); }
+
+/* Stats Grid */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.stat-box { background:#16162a; border:1px solid #252540; border-radius:8px; padding:16px; text-align:center; }
+.stat-box .value { font-size:24px; font-weight:700; margin:4px 0; }
+.stat-box .label { font-size:11px; color:#888; text-transform:uppercase; }
+.stat-box.highlight { border-color:#5b9bd5; background:#1a1a35; }
+.stat-box.highlight .value { color:#5b9bd5; }
+.win { color:#ef5350; }
+.loss { color:#26a69a; }
+.text-green { color:#4caf50; }
+.text-red { color:#ef5350; }
+
+/* Chart */
+#chartContainer { width:100%; height:480px; border-radius:8px; overflow:hidden; }
+#volumeContainer { width:100%; height:120px; border-radius:0 0 8px 8px; overflow:hidden; margin-top:-1px; }
+.chart-legend { display:flex; gap:16px; padding:8px 0; font-size:12px; color:#888; flex-wrap:wrap; }
+.chart-legend span { display:flex; align-items:center; gap:4px; }
+.chart-legend .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.chart-controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+
+/* Trade Table */
+.trade-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+.trade-table th { background:#252540; padding:10px 8px; text-align:left; color:#aaa; font-weight:500; position:sticky; top:0; z-index:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trade-table td { padding:8px; border-bottom:1px solid #252540; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
+.trade-table td.reason-cell { text-align:center; overflow:visible; padding:6px 4px; }
+.trade-table th.spacer-th { background:transparent; border:none; pointer-events:none; }
+.trade-table td.spacer-td { border-bottom:1px solid #252540; }
+.trade-table tr { cursor:pointer; transition:all .15s; }
+.trade-table tr:hover { background:#1e1e35; }
+.trade-table tr.trade-selected { background:#1a2a4e !important; border-left:3px solid #5b9bd5; }
+.trade-table .badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.badge-win { background:rgba(239,83,80,.15); color:#ef5350; }
+.badge-loss { background:rgba(38,166,154,.15); color:#26a69a; }
+.badge-open { background:rgba(255,193,7,.15); color:#ffc107; }
+.trade-reason-tip { position:relative; display:inline-block; }
+.trade-reason-tip .tip-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:#2a2a4e; color:#7ec8e3; border-radius:50%; font-size:12px; font-weight:700; cursor:help; border:1px solid #3a3a5e; transition:all .2s; user-select:none; }
+.trade-reason-tip:hover .tip-icon { background:#5b9bd5; color:#fff; border-color:#5b9bd5; }
+.trade-reason-tip .tip-pop { display:none; position:absolute; bottom:calc(100% + 8px); right:0; width:360px; background:#252540; border:1px solid #3a3a5e; border-radius:8px; padding:12px 14px; font-size:11px; color:#ccc; line-height:1.7; z-index:9999; box-shadow:0 6px 24px rgba(0,0,0,.6); white-space:normal; word-break:break-word; text-align:left; }
+.trade-reason-tip .tip-pop::after { content:''; position:absolute; top:100%; right:8px; border:6px solid transparent; border-top-color:#3a3a5e; }
+.trade-reason-tip:hover .tip-pop { display:block; }
+.table-wrap { max-height:500px; overflow-y:auto; border-radius:8px; border:1px solid #252540; }
+
+/* Loading */
+.loading { display:none; text-align:center; padding:40px; }
+.loading.active { display:block; }
+.spinner { width:40px; height:40px; border:3px solid #252540; border-top-color:#5b9bd5; border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Hidden */
+.hidden { display:none !important; }
+
+/* Mode Toggle */
+.mode-toggle { display:flex; align-items:center; gap:0; margin-bottom:16px; background:#252540; border-radius:8px; overflow:hidden; border:1px solid #3a3a5e; }
+.mode-toggle button { flex:1; padding:10px 16px; background:transparent; border:none; color:#888; font-size:13px; font-weight:500; cursor:pointer; transition:all .2s; }
+.mode-toggle button.active { background:#3a7bd5; color:#fff; }
+.mode-toggle button:hover:not(.active) { color:#ccc; background:#2a2a4e; }
+.auto-info { background:#16162a; border:1px solid #2a4a6e; border-radius:8px; padding:14px 18px; margin-bottom:16px; font-size:13px; color:#aaa; line-height:1.6; }
+.auto-info strong { color:#f5c842; }
+.params-section.auto-hidden { opacity:0.3; pointer-events:none; filter:grayscale(0.5); }
+
+/* Recommendation Banner */
+.recommend-banner { background:#1a2a3e; border:1px solid #2a4a6e; border-radius:8px; padding:14px 18px; margin-bottom:16px; font-size:13px; line-height:1.6; display:none; }
+.recommend-banner.active { display:block; }
+.recommend-banner .rec-title { color:#5b9bd5; font-weight:600; margin-bottom:6px; font-size:14px; }
+.recommend-banner .rec-detail { color:#aaa; }
+@keyframes rec-blink { 0%,100%{opacity:1;} 50%{opacity:0.15;} }
+.recommend-banner .rec-title.rec-title-loading { animation: rec-blink 0.9s ease-in-out infinite; }
+.recommend-banner .rec-highlight { color:#f5c842; font-weight:600; }
+.recommend-banner .rec-actions { margin-top:10px; display:flex; gap:8px; }
+
+/* Responsive */
+@media(max-width:768px) {
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .params { grid-template-columns:1fr 1fr; }
+  header h1 { font-size:22px; }
+  .tooltip-content { width:260px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Stock Trading Simulator</h1>
+  <p>벤포드 법칙 + 기술적 분석 기반 매수/매도 시뮬레이션 &nbsp;|&nbsp; Walk-forward Backtest</p>
+</header>
+
+<!-- Upload -->
+<div class="card">
+  <h2>1. XML 주가 데이터 업로드</h2>
+  <div style="display:flex; gap:12px; margin-bottom:16px; align-items:flex-end;">
+    <div style="flex:1;">
+      <label style="display:block; font-size:12px; color:#888; margin-bottom:4px;">종목코드 또는 종목명 입력 → 자동 데이터 로드</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="symbolInput" placeholder="예: 005930 또는 삼성전자" style="flex:1; background:#252540; border:1px solid #3a3a5e; color:#fff; padding:8px 12px; border-radius:6px; font-size:14px;">
+        <button class="btn btn-sm btn-outline" id="fetchBtn" style="white-space:nowrap;">데이터 불러오기</button>
+      </div>
+    </div>
+  </div>
+  <div id="xmlLinkResult" style="display:none; background:#16162a; border:1px solid #252540; border-radius:8px; padding:12px 16px; margin-bottom:12px; font-size:13px;"></div>
+  <div style="text-align:center; color:#555; font-size:12px; margin-bottom:12px;">── 또는 XML 파일 업로드 ──</div>
+  <div id="uploadAreaWrap">
+    <div class="upload-area" id="uploadArea">
+      <div class="icon">📂</div>
+      <p>XML 파일을 드래그하거나 클릭하여 업로드</p>
+      <div class="filename" id="fileName"></div>
+    </div>
+    <div id="globalOptToast">
+      <span class="toast-text">⚙ 자동 최적화 진행 중...</span>
+      <span class="toast-sub">6개 파라미터 조합 탐색 중입니다. 잠시만 기다려주세요.</span>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".xml">
+
+  <div class="instructions">
+    <div class="instructions-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open');">
+      <span>📋 XML 파일 만드는 방법 (네이버 증권)</span>
+      <span class="toggle-arrow">▼</span>
+    </div>
+    <div class="instructions-body">
+      <ol>
+        <li><strong>종목코드 확인</strong> — 네이버 증권에서 원하는 종목 검색 후 URL의 숫자가 종목코드입니다.
+          <br>예: <code>https://finance.naver.com/item/main.nhn?code=<strong>005930</strong></code> → 삼성전자 = <strong>005930</strong></li>
+        <li><strong>아래 URL에 종목코드를 넣고</strong> 브라우저 주소창에 입력:
+          <br><code>https://fchart.stock.naver.com/sise.nhn?symbol=<strong>종목코드</strong>&timeframe=day&count=5000&requestType=0</code>
+          <br>예시: <code>https://fchart.stock.naver.com/sise.nhn?symbol=005930&timeframe=day&count=5000&requestType=0</code></li>
+        <li><strong>페이지에서 Ctrl+S (또는 Cmd+S)</strong>로 XML 파일 저장</li>
+        <li>저장한 <strong>.xml 파일을 위에 업로드</strong></li>
+      </ol>
+      <h3 style="color:#bbb; margin:12px 0 8px;">자주 사용하는 종목코드</h3>
+      <table>
+        <tr><th>종목</th><th>코드</th><th>종목</th><th>코드</th><th>종목</th><th>코드</th></tr>
+        <tr><td>삼성전자</td><td>005930</td><td>카카오</td><td>035720</td><td>네이버</td><td>035420</td></tr>
+        <tr><td>카카오페이</td><td>377300</td><td>삼성SDI</td><td>006400</td><td>LG에너지솔루션</td><td>373220</td></tr>
+        <tr><td>현대차</td><td>005380</td><td>SK하이닉스</td><td>000660</td><td>셀트리온</td><td>068270</td></tr>
+        <tr><td>POSCO홀딩스</td><td>005490</td><td>KB금융</td><td>105560</td><td>삼성바이오로직스</td><td>207940</td></tr>
+      </table>
+      <p style="margin-top:10px; color:#777;">※ XML 형식: <code>&lt;item data="날짜|시가|고가|저가|종가|거래량" /&gt;</code> — 네이버 증권 차트 API에서 자동 생성됩니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Parameters -->
+<div class="card">
+  <h2>2. 매매 파라미터 설정</h2>
+  <div class="mode-toggle">
+    <button id="modeManual" onclick="setMode('manual')">수동 설정</button>
+    <button id="modeAuto" class="active" onclick="setMode('auto')">자동 최적화 (권장)</button>
+  </div>
+  <div class="auto-info" id="autoInfo">
+    <strong>자동 최적화 모드</strong><br>
+    XML 업로드 후 "분석 시작"을 누르면, 주가 변동성을 분석하여 종목 특성에 맞는<br>
+    <strong>익절/손절/쿨다운/보유일/벤포드윈도우/영향도/최소감지횟수</strong> 6개 파라미터의 최적 조합을 자동 탐색합니다.<br>
+    <span style="color:#666;">※ 최적화 후 파라미터를 수동으로 조정한 뒤 "분석 시작"을 눌러도 됩니다.</span>
+  </div>
+  <div class="params" id="paramsSection">
+    <div class="param-group">
+      <label>
+        종목 유형
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">종목 유형이란?</div>
+            대형주(삼성전자, 현대차 등)와 중소형주(카카오페이, 셀트리온 등)는 <strong>변동성과 거래 패턴</strong>이 크게 다릅니다.
+            <br><br>
+            <strong>중소형주</strong>: 변동성이 크고, 급등/급락이 잦음. 높은 익절(21%)을 노릴 수 있지만 빠른 손절(7%)이 필요.
+            <br><br>
+            <strong>대형주</strong>: 변동성이 낮고, 완만한 추세. 낮은 익절(10%)에 넉넉한 손절(10%)이 더 적합. 대형주에 +21% 익절을 설정하면 도달 자체가 어려워 승률이 급락합니다.
+            <div class="tip-recommend">선택 시 아래 파라미터가 권장값으로 자동 변경됩니다.</div>
+          </span>
+        </span>
+      </label>
+      <select id="stockProfile">
+        <option value="default">일반 (중소형 성장주)</option>
+        <option value="large_cap">대형 우량주</option>
+      </select>
+    </div>
+    <div class="param-group">
+      <label>
+        익절 기준 (%)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">익절(Take Profit)이란?</div>
+            매수 후 주가가 이 수치만큼 <strong>상승하면 자동으로 매도</strong>하여 이익을 실현합니다.
+            <div class="tip-example">예: 17% → 10,000원에 매수 시 11,700원에 도달하면 매도</div>
+            <div class="tip-recommend">
+              권장값 — 중소형주: 17% (변동성 커서 큰 수익 가능) | 대형주: 10% (변동성 낮아 현실적 목표)
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="takeProfit" value="17" min="1" max="100" step="1">
+    </div>
+    <div class="param-group">
+      <label>
+        손절 기준 (%)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">손절(Stop Loss)이란?</div>
+            매수 후 주가가 이 수치만큼 <strong>하락하면 자동으로 매도</strong>하여 추가 손실을 방지합니다.
+            <div class="tip-example">예: 7% → 10,000원에 매수 시 9,300원에 도달하면 매도</div>
+            <div class="tip-recommend">
+              권장값 — 중소형주: 7% (빠른 손절로 큰 하락 방지) | 대형주: 10% (일시적 변동에 휩쓸리지 않도록 넉넉하게)
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="stopLoss" value="7" min="1" max="50" step="1">
+    </div>
+    <div class="param-group">
+      <label>
+        쿨다운 (일)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">쿨다운이란?</div>
+            매수 시그널이 발생한 후 <strong>다음 매수까지 대기하는 일수</strong>입니다. 같은 상승 추세에서 중복 매수를 방지합니다.
+            <div class="tip-example">예: 3일 → 매수 후 3거래일 동안 새 시그널이 발생해도 무시</div>
+            <div class="tip-recommend">
+              권장값 — 중소형주: 3일 (빠른 추세 변화에 대응) | 대형주: 5일 (느린 추세에 맞춤). 값을 높이면 거래 횟수 감소, 낮추면 증가.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="cooldown" value="3" min="1" max="30" step="1">
+    </div>
+    <div class="param-group">
+      <label>
+        벤포드 윈도우 (일)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">벤포드 윈도우란?</div>
+            <strong>벤포드 법칙</strong> 분석 + 세력 감시에 사용하는 최근 N일의 범위입니다.
+            <br><br>
+            ① 각 일봉의 거래량/가격 <strong>첫째자리 숫자 분포</strong>를 분석하여 이상 여부 판정
+            <br>
+            ② 이 윈도우 기간 내에 이상일이 <strong>최소 감지횟수 이상</strong>이면 세력 매집으로 판정
+            <br><br>
+            <strong>15~20일</strong>: 단기 세력 매집 포착 (민감)
+            <br>
+            <strong>30일</strong>: 중기 매집 패턴 추적 (균형)
+            <br>
+            <strong>45~60일</strong>: 장기 매집 추적 (안정적)
+            <div class="tip-recommend">
+              권장값: 30일. 분석 정확도와 세력 추적 범위의 최적 균형.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="benfordWindow" value="30" min="10" max="60" step="5">
+    </div>
+    <div class="param-group">
+      <label>
+        벤포드 영향도 (%)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">벤포드 영향도란?</div>
+            벤포드 법칙 분석 결과가 매수 스코어에 미치는 <strong>최대 가중치</strong>입니다.
+            <br><br>
+            <strong>0%</strong>: 벤포드 법칙 완전 비활성화 (순수 기술적 분석만 사용)
+            <br>
+            <strong>15%</strong>: 이상 패턴 감지 시 스코어 최대 +15% 가산 (기본값)
+            <br>
+            <strong>30%</strong>: 벤포드 영향 극대화
+            <br><br>
+            현재 모드는 <strong>양(+)의 가산</strong>입니다. 이미 모든 필수 기술적 조건을 통과한 종목에서 거래량/가격 패턴이 비정상이면, 기관이나 세력의 의도적 매집으로 해석하여 가산점을 줍니다.
+            <div class="tip-recommend">
+              권장값: 15%. 0%로 설정하면 벤포드 법칙 없이 순수 기술적 분석만 적용됩니다.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="benfordInfluence" value="15" min="0" max="30" step="5">
+    </div>
+    <div class="param-group">
+      <label>
+        세력 최소 감지횟수
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">세력 최소 감지횟수란?</div>
+            벤포드 윈도우 기간 내에 벤포드 이상이 <strong>최소 몇 회</strong> 감지되어야 세력 매집으로 판정할지 설정합니다.
+            <br><br>
+            <strong>2회</strong>: 느슨한 기준 (시그널 많음, 노이즈 위험)
+            <br>
+            <strong>3~5회</strong>: 세력 매집 가능성 높은 수준
+            <br>
+            <strong>7회+</strong>: 확실한 세력 개입만 포착 (기회 감소)
+            <div class="tip-example">예: 윈도우 30일, 최소 3회 → 30일 중 3일 이상 벤포드 이상이면 세력 매집 판정<br>세력은 매일 매집하지 않으므로 "연속"이 아닌 "누적"으로 추적</div>
+            <div class="tip-recommend">
+              권장값: 3회. 노이즈를 걸러내면서도 매집 초기를 포착합니다.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="benfordMinHits" value="3" min="1" max="15" step="1">
+    </div>
+    <div class="param-group">
+      <label>
+        매매 수수료 (%)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">매매 수수료란?</div>
+            증권사에 지불하는 <strong>매수/매도 각각의 거래 수수료율</strong>입니다.
+            <br><br>
+            <strong>계산식:</strong>
+            <br>
+            매수비용 = 매수가 × (1 + 수수료율)
+            <br>
+            매도수입 = 매도가 × (1 − 수수료율 − 매도세율)
+            <br>
+            수익률 = (매도수입 − 매수비용) / 매수비용 × 100
+            <div class="tip-example">예: 수수료 0.015%, 세금 0.18% → 10,000원 매수 시 매수비용 10,001.5원, 매도수입 9,980.5원(10,000원 매도 시)</div>
+            <div class="tip-recommend">
+              온라인: 0.015~0.03% | MTS(모바일): 0.003~0.01% | HTS: 0.01~0.015%
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="commissionRate" value="0.015" min="0" max="1" step="0.005">
+    </div>
+    <div class="param-group">
+      <label>
+        매도 세금 (%)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">매도 세금이란?</div>
+            매도 시에만 부과되는 <strong>증권거래세 + 농어촌특별세</strong>입니다. 매수 시에는 부과되지 않습니다.
+            <br><br>
+            <strong>코스피</strong>: 증권거래세 0.03% + 농특세 0.15% = <strong>0.18%</strong>
+            <br>
+            <strong>코스닥</strong>: 증권거래세 <strong>0.18%</strong> (농특세 없음)
+            <br><br>
+            <strong>총 거래비용 (왕복):</strong>
+            <br>
+            = 매수수수료 + 매도수수료 + 매도세금
+            <br>
+            = 0.015% + 0.015% + 0.18% = <strong>약 0.21%</strong>
+            <div class="tip-recommend">
+              코스피/코스닥 모두 0.18%가 일반적. ETF는 비과세(0%).
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="taxRate" value="0.18" min="0" max="1" step="0.01">
+    </div>
+    <div class="param-group">
+      <label>
+        거래 수량 (주)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">거래 수량이란?</div>
+            매수 시그널 발생 시 <strong>매수할 주식 수량</strong>입니다. 수익금 계산에 반영됩니다.
+            <div class="tip-example">예: 10주 → 10,000원 종목 매수 시 투자금 100,000원</div>
+            <div class="tip-recommend">
+              기본값: 10주. 투자 규모에 맞게 조절하세요.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="quantity" value="10" min="1" max="10000" step="1">
+    </div>
+    <div class="param-group">
+      <label>
+        분석 기간 (거래일)
+        <span class="tooltip-wrap">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltip-content">
+            <div class="tip-title">분석 기간이란?</div>
+            데이터의 <strong>마지막 날(현재일)로부터 몇 거래일 전</strong>부터 투자를 시작할지 설정합니다.
+            <br><br>
+            <strong>0</strong>: 전체 기간 분석 (기본값)
+            <br>
+            <strong>10</strong>: 최근 10거래일만
+            <br>
+            <strong>60</strong>: 최근 약 3개월
+            <br>
+            <strong>250</strong>: 최근 약 1년
+            <div class="tip-example">예: 100 → 데이터 마지막일 기준 100거래일 전부터 매매 시뮬레이션</div>
+            <div class="tip-recommend">
+              0이면 전체 기간. 짧게 설정하면 최근 시장 상황에 대한 전략 성과를 확인할 수 있습니다.
+            </div>
+          </span>
+        </span>
+      </label>
+      <input type="number" id="analysisRange" value="10" min="0" max="99999" step="10">
+      <div style="display:flex; gap:3px; margin-top:4px;">
+        <button class="btn btn-sm btn-outline range-btn" onclick="document.getElementById('analysisRange').value=0" style="padding:3px 0; font-size:11px; flex:1;">전체</button>
+        <button class="btn btn-sm btn-outline range-btn" onclick="document.getElementById('analysisRange').value=60" style="padding:3px 0; font-size:11px; flex:1;">3개월</button>
+        <button class="btn btn-sm btn-outline range-btn" onclick="document.getElementById('analysisRange').value=250" style="padding:3px 0; font-size:11px; flex:1;">1년</button>
+        <button class="btn btn-sm btn-outline range-btn" onclick="document.getElementById('analysisRange').value=500" style="padding:3px 0; font-size:11px; flex:1;">2년</button>
+      </div>
+    </div>
+  </div>
+  <div class="recommend-banner" id="recommendBanner"></div>
+  <div style="text-align:center; margin-top:8px;">
+    <button class="btn btn-primary" id="analyzeBtn" disabled>분석 시작</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <p id="loadingMsg">분석 중... 기술지표 계산 및 백테스트 실행</p>
+</div>
+
+<!-- Results (hidden until analysis) -->
+<div id="results" class="hidden">
+
+  <!-- Stats -->
+  <div class="card">
+    <h2>3. 분석 결과</h2>
+    <div id="stockInfo" style="margin-bottom:16px; color:#aaa; font-size:14px;"></div>
+    <div class="stats-grid" id="statsGrid"></div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card">
+    <h2>4. 차트</h2>
+    <div class="chart-legend">
+      <span><span class="dot" style="background:#ef5350"></span> 양봉(상승)</span>
+      <span><span class="dot" style="background:#26a69a"></span> 음봉(하락)</span>
+      <span><span class="dot" style="background:#f5c842"></span> MA5</span>
+      <span><span class="dot" style="background:#2196f3"></span> MA20</span>
+      <span><span class="dot" style="background:#e040fb"></span> MA60</span>
+      <span>▲ 매수 &nbsp; ▼ 매도</span>
+    </div>
+    <div id="chartContainer"></div>
+    <div id="volumeContainer"></div>
+    <div class="chart-controls">
+      <button class="btn btn-sm btn-outline" id="btnShowAll">전체 마커 표시</button>
+      <button class="btn btn-sm btn-outline" id="btnClearChart">차트 초기화</button>
+      <span style="font-size:12px; color:#666; margin-left:8px; line-height:30px;">아래 거래 행을 클릭하면 해당 구간으로 이동합니다</span>
+    </div>
+  </div>
+
+  <!-- Trade Details -->
+  <div class="card">
+    <h2>5. 거래 상세 내역</h2>
+    <div class="table-wrap">
+      <table class="trade-table" id="tradeTable">
+        <colgroup>
+          <col style="width:44px">   <!-- # -->
+          <col style="width:64px">   <!-- 결과 -->
+          <col style="width:124px">  <!-- 매수일: "2024-05-20" 여유있게 -->
+          <col style="width:122px">  <!-- 매수가: "190,000원" 여유있게 -->
+          <col style="width:78px">   <!-- 수량: "100주" -->
+          <col style="width:96px">   <!-- 투자금: "1,900만" -->
+          <col style="width:124px">  <!-- 매도일 -->
+          <col style="width:122px">  <!-- 매도가 -->
+          <col style="width:98px">   <!-- 수익률: "+12.76%" -->
+          <col style="width:98px">   <!-- 수익금: "+212만" -->
+          <col style="width:78px">   <!-- 보유일: header "보유일" 3자 확보 -->
+          <col style="width:98px">   <!-- 청산사유: header 4자 확보 -->
+          <col style="width:82px">   <!-- 스코어: header 3자 확보 -->
+          <col style="width:42px">   <!-- 근거: 툴팁 아이콘 -->
+          <col>                       <!-- spacer: 나머지 공간 흡수 -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th><th>결과</th><th>매수일</th><th>매수가</th><th>수량</th><th>투자금</th>
+            <th>매도일</th><th>매도가</th><th>수익률</th><th>수익금</th><th>보유일</th>
+            <th>청산사유</th><th>스코어</th><th style="text-align:center">근거</th><th class="spacer-th"></th>
+          </tr>
+        </thead>
+        <tbody id="tradeBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 분석 방법 상세 설명 -->
+  <div class="card">
+    <h2>6. 분석 방법 상세 설명</h2>
+    <div style="font-size:14px; line-height:2; color:#ccc;">
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">전체 흐름 요약</h3>
+      <div style="background:#16162a; border:1px solid #252540; border-radius:8px; padding:16px 20px; margin-bottom:16px;">
+        <div style="text-align:center; font-size:13px; color:#aaa;">
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#5b9bd5; font-weight:600;">XML 데이터 로드</span>
+          <span style="color:#555; margin:0 8px;">→</span>
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#f5c842; font-weight:600;">기술지표 계산</span>
+          <span style="color:#555; margin:0 8px;">→</span>
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#4caf50; font-weight:600;">매수 스코어링</span>
+          <span style="color:#555; margin:0 8px;">→</span>
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#ef5350; font-weight:600;">매도 판정</span>
+          <span style="color:#555; margin:0 8px;">→</span>
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#e040fb; font-weight:600;">결과 집계</span>
+        </div>
+      </div>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 1. 기술지표 계산</h3>
+      <p>XML로 불러온 일봉 데이터(날짜, 시가, 고가, 저가, 종가, 거래량)를 기반으로 다음 기술지표를 계산합니다.</p>
+      <table style="width:100%; border-collapse:collapse; margin:12px 0; font-size:13px;">
+        <tr style="background:#252540; color:#aaa;">
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">지표</th>
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">설정</th>
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">의미</th>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">이동평균선 (MA)</td>
+          <td style="padding:8px 12px; border:1px solid #333;">5일, 20일, 60일</td>
+          <td style="padding:8px 12px; border:1px solid #333;">단기/중기/장기 추세 방향. 정배열(MA5>MA20>MA60)이면 강한 상승 추세</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">RSI</td>
+          <td style="padding:8px 12px; border:1px solid #333;">14일 (Wilder 방식)</td>
+          <td style="padding:8px 12px; border:1px solid #333;">0~100 사이 값. 30 이하면 과매도(반등 가능성↑), 70 이상이면 과매수(하락 가능성↑)</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">볼린저 밴드</td>
+          <td style="padding:8px 12px; border:1px solid #333;">20일, 2σ</td>
+          <td style="padding:8px 12px; border:1px solid #333;">가격이 하단 밴드에 가까울수록 저평가, 상단이면 고평가. BB위치(%)로 표현</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">MACD</td>
+          <td style="padding:8px 12px; border:1px solid #333;">12/26/9</td>
+          <td style="padding:8px 12px; border:1px solid #333;">추세 전환 감지. MACD가 시그널선을 상향돌파하면 골든크로스(매수 신호)</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">거래량 비율</td>
+          <td style="padding:8px 12px; border:1px solid #333;">20일 평균 대비</td>
+          <td style="padding:8px 12px; border:1px solid #333;">평소 대비 거래량 배수. 1.2~3배가 건강한 매수세, 6배 이상은 과열</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#f5c842;">캔들스틱 패턴</td>
+          <td style="padding:8px 12px; border:1px solid #333;">해머, 상승장악형</td>
+          <td style="padding:8px 12px; border:1px solid #333;">하락 후 반전을 암시하는 캔들 형태. 해머=긴 아래꼬리, 장악형=전일 음봉을 감싸는 양봉</td>
+        </tr>
+      </table>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 2. 벤포드 법칙 (세력 매집 감지)</h3>
+      <p><strong style="color:#f5c842;">벤포드 법칙</strong>이란, 자연적으로 발생한 숫자 데이터에서 <strong>첫째 자리 숫자의 분포가 균등하지 않다</strong>는 법칙입니다.</p>
+      <div style="background:#16162a; border:1px solid #252540; border-radius:8px; padding:14px 18px; margin:12px 0;">
+        <div style="font-size:13px; color:#aaa;">자연적인 거래량의 첫째 자리 분포 (벤포드 법칙)</div>
+        <div style="font-size:13px; margin-top:6px;">
+          <span style="color:#5b9bd5;">1</span>: 30.1% &nbsp;
+          <span style="color:#5b9bd5;">2</span>: 17.6% &nbsp;
+          <span style="color:#5b9bd5;">3</span>: 12.5% &nbsp;
+          <span style="color:#5b9bd5;">4</span>: 9.7% &nbsp;
+          <span style="color:#5b9bd5;">5</span>: 7.9% &nbsp;
+          <span style="color:#5b9bd5;">6</span>: 6.7% &nbsp;
+          <span style="color:#5b9bd5;">7</span>: 5.8% &nbsp;
+          <span style="color:#5b9bd5;">8</span>: 5.1% &nbsp;
+          <span style="color:#5b9bd5;">9</span>: 4.6%
+        </div>
+        <div style="font-size:12px; color:#888; margin-top:8px;">
+          → 숫자 1이 30%로 가장 많고, 9가 4.6%로 가장 적음. <strong style="color:#f5c842;">이 분포에서 크게 벗어나면 인위적 조작(세력 매집) 가능성</strong>
+        </div>
+      </div>
+      <p>이 시뮬레이터는 설정한 <strong>벤포드 윈도우</strong>(예: 30일) 기간 동안의 거래량과 가격 변동의 첫째 자리 숫자 분포를 분석합니다.</p>
+      <ul style="padding-left:20px; margin:8px 0;">
+        <li>카이제곱(χ²) 검정으로 벤포드 법칙과의 편차를 측정</li>
+        <li>편차가 큰 날(이상일)이 윈도우 내에 <strong>최소 감지횟수</strong> 이상 발견되면 → <strong style="color:#ef5350;">세력 매집 판정</strong></li>
+        <li>세력 매집 판정 시, 매수 스코어에 <strong>벤포드 영향도</strong>만큼 가산점 부여</li>
+      </ul>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 3. 매수 스코어링 (점수 계산)</h3>
+      <p>매일 아래 항목들의 점수를 합산하여 <strong>총 스코어</strong>를 계산합니다. 스코어가 <strong style="color:#f5c842;">5.0점 이상</strong>이면 매수 시그널이 발생합니다.</p>
+
+      <div style="margin:12px 0;">
+        <div style="color:#4caf50; font-weight:600; margin:12px 0 8px;">패턴 A: 과매도 반등 매수 (상승의 64%가 이 패턴)</div>
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <tr style="background:#252540; color:#aaa;">
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">항목</th>
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">조건</th>
+            <th style="padding:6px 12px; text-align:center; border:1px solid #333;">점수</th>
+          </tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">RSI 과매도</td><td style="padding:6px 12px; border:1px solid #333;">RSI &lt; 25 (극과매도)</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+3.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;"></td><td style="padding:6px 12px; border:1px solid #333;">RSI &lt; 35 (과매도)</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+3.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;"></td><td style="padding:6px 12px; border:1px solid #333;">RSI &lt; 45 (약과매도)</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">BB 위치</td><td style="padding:6px 12px; border:1px solid #333;">하단 15% 이내</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;"></td><td style="padding:6px 12px; border:1px solid #333;">하단 30% 이내</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">최근 5일 하락</td><td style="padding:6px 12px; border:1px solid #333;">-8% 이상 급락</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;"></td><td style="padding:6px 12px; border:1px solid #333;">-4% 이상 하락</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">연속 하락 반전</td><td style="padding:6px 12px; border:1px solid #333;">3일 이상 음봉 후 양봉 전환</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">20일 저점 근접</td><td style="padding:6px 12px; border:1px solid #333;">저점 대비 2% 이내</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">MA20 이격</td><td style="padding:6px 12px; border:1px solid #333;">MA20 대비 -8% 이격</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.5</td></tr>
+        </table>
+      </div>
+
+      <div style="margin:12px 0;">
+        <div style="color:#2196f3; font-weight:600; margin:12px 0 8px;">패턴 B: 추세 추종 매수 (상승의 35%가 이 패턴)</div>
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <tr style="background:#252540; color:#aaa;">
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">항목</th>
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">조건</th>
+            <th style="padding:6px 12px; text-align:center; border:1px solid #333;">점수</th>
+          </tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">이동평균 정배열</td><td style="padding:6px 12px; border:1px solid #333;">MA5 > MA20 > MA60</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">MA20 기울기</td><td style="padding:6px 12px; border:1px solid #333;">10일간 3% 이상 상승</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">신고가 근접</td><td style="padding:6px 12px; border:1px solid #333;">20일 고점 대비 3% 이내</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.0</td></tr>
+        </table>
+      </div>
+
+      <div style="margin:12px 0;">
+        <div style="color:#ffc107; font-weight:600; margin:12px 0 8px;">공통 시그널</div>
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <tr style="background:#252540; color:#aaa;">
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">항목</th>
+            <th style="padding:6px 12px; text-align:left; border:1px solid #333;">조건</th>
+            <th style="padding:6px 12px; text-align:center; border:1px solid #333;">점수</th>
+          </tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">MACD 골든크로스</td><td style="padding:6px 12px; border:1px solid #333;">MACD가 시그널선 상향돌파</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">거래량</td><td style="padding:6px 12px; border:1px solid #333;">평균의 1.2~3배</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">양봉</td><td style="padding:6px 12px; border:1px solid #333;">종가 > 시가</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+0.5</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333;">상승장악형</td><td style="padding:6px 12px; border:1px solid #333;">전일 음봉을 감싸는 양봉</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+1.0</td></tr>
+          <tr><td style="padding:6px 12px; border:1px solid #333; color:#ef5350;">5일 급등 주의</td><td style="padding:6px 12px; border:1px solid #333;">5일간 15% 이상 상승</td><td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350;">-1.5</td></tr>
+        </table>
+      </div>
+
+      <div style="background:#16162a; border:1px solid #2a4a6e; border-radius:8px; padding:14px 18px; margin:16px 0;">
+        <div style="color:#f5c842; font-weight:600; margin-bottom:6px;">스코어 예시</div>
+        <div style="font-size:13px; color:#aaa;">
+          RSI 32(과매도 +3.0) + BB위치 22%(+2.0) + 5일하락 -5%(+2.0) + MACD골든크로스(+1.5) + 양봉(+0.5)<br>
+          = <strong style="color:#4caf50;">총 9.0점</strong> → 5.0점 이상이므로 <strong style="color:#ef5350;">매수 시그널 발생!</strong>
+        </div>
+      </div>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 4. 매도 판정 (익절/손절)</h3>
+      <p>매수 후, 매일의 고가·저가를 확인하여 다음 조건에 도달하면 자동 매도합니다.</p>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin:12px 0;">
+        <tr style="background:#252540; color:#aaa;">
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">구분</th>
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">조건</th>
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">예시 (10,000원 매수)</th>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#4caf50; font-weight:600;">익절 (Take Profit)</td>
+          <td style="padding:8px 12px; border:1px solid #333;">고가가 매수가 × (1 + 익절률)에 도달</td>
+          <td style="padding:8px 12px; border:1px solid #333;">익절 17% → 고가가 11,700원 도달 시 매도</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#ef5350; font-weight:600;">손절 (Stop Loss)</td>
+          <td style="padding:8px 12px; border:1px solid #333;">저가가 매수가 × (1 - 손절률)에 도달</td>
+          <td style="padding:8px 12px; border:1px solid #333;">손절 7% → 저가가 9,300원 도달 시 매도</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333; color:#ffc107; font-weight:600;">동시 도달</td>
+          <td style="padding:8px 12px; border:1px solid #333;">같은 날 익절·손절 모두 도달</td>
+          <td style="padding:8px 12px; border:1px solid #333;">보수적으로 손절 처리 (시가 기준 재판단)</td>
+        </tr>
+      </table>
+      <p style="font-size:13px; color:#888;">※ 수수료(매수·매도)와 매도세금이 반영된 실질 수익률로 최종 승/패를 판정합니다.</p>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 5. 자동 최적화 (워크포워드 검증)</h3>
+      <p>자동 최적화 모드에서는 <strong>과적합을 방지</strong>하기 위해 워크포워드(Walk-Forward) 방식을 사용합니다.</p>
+      <div style="background:#16162a; border:1px solid #252540; border-radius:8px; padding:14px 18px; margin:12px 0; font-size:13px;">
+        <div style="margin-bottom:8px;">
+          <span style="color:#2196f3; font-weight:600;">1단계 — 변동성 분석</span><br>
+          <span style="color:#aaa;">일평균 ATR(변동폭)을 측정하여 종목의 변동성 등급을 자동 판별합니다. 이를 기반으로 익절/손절 탐색 범위를 결정합니다.</span>
+        </div>
+        <div style="margin-bottom:8px;">
+          <span style="color:#2196f3; font-weight:600;">2단계 — 훈련 구간에서 파라미터 탐색</span><br>
+          <span style="color:#aaa;">데이터의 앞부분(70%)을 훈련 구간으로 사용하여, 익절/손절/쿨다운/벤포드 윈도우/영향도/최소감지횟수 6개 파라미터의 모든 조합을 시뮬레이션합니다. 두 가지 기준으로 최적 조합을 동시에 탐색합니다:</span>
+          <div style="margin:6px 0 0 12px; color:#aaa;">
+            <span style="color:#f5c842;">안정형(승률)</span> — 승률이 가장 높은 조합. 자주 이기는 것이 목표.<br>
+            <span style="color:#e040fb;">수익형(수익률)</span> — 평균수익률이 가장 높은 조합. 한 번 이길 때 크게 먹는 것이 목표.
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <span style="color:#2196f3; font-weight:600;">3단계 — 테스트 구간에서 검증</span><br>
+          <span style="color:#aaa;">데이터의 뒷부분(30%)은 훈련에 사용하지 않은 "미래" 데이터입니다. 여기서 동일한 파라미터로 시뮬레이션하여 실전 성과를 추정합니다. 훈련과 테스트 승률이 비슷하면 신뢰도가 높습니다.</span>
+        </div>
+        <div>
+          <span style="color:#2196f3; font-weight:600;">4단계 — 전략 선택</span><br>
+          <span style="color:#aaa;"><strong style="color:#f5c842;">안정형(승률)</strong>과 <strong style="color:#e040fb;">수익형(수익률)</strong> 두 버튼 중 원하는 전략을 클릭하면 해당 최적 파라미터가 자동 적용됩니다. 이후 "분석 시작"을 누르면 선택한 파라미터로 백테스트가 실행됩니다.</span>
+        </div>
+      </div>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">핵심 전략 철학</h3>
+      <div style="background:#16162a; border:1px solid #252540; border-radius:8px; padding:14px 18px; margin:12px 0; font-size:13px; color:#aaa; line-height:1.8;">
+        <div style="margin-bottom:10px;">
+          <strong style="color:#f5c842;">듀얼 엔진 전략</strong> — 실제 3종목, 104개 10%+ 상승 사례를 분석한 결과:
+        </div>
+        <ul style="padding-left:20px; margin:0;">
+          <li>상승의 <strong style="color:#4caf50;">64%</strong>는 RSI 50 이하(과매도 상태)에서 시작 → <strong>과매도 반등 매수</strong></li>
+          <li>상승의 <strong style="color:#4caf50;">87%</strong>는 직전 5일 수익이 마이너스 → <strong>하락 후 반등 포착</strong></li>
+          <li>상승의 <strong style="color:#4caf50;">71%</strong>는 음봉날(하락한 날) 시작 → <strong>공포에 매수</strong></li>
+          <li>상승의 <strong style="color:#2196f3;">35%</strong>는 이미 상승 추세 중 가속 → <strong>추세 추종 매수</strong></li>
+        </ul>
+        <div style="margin-top:10px; color:#5b9bd5;">
+          → 두 가지 패턴을 모두 포착하여, "바닥에서 줍기"와 "흐름을 타기"를 동시에 실행합니다.
+        </div>
+      </div>
+
+      <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">수수료·세금 계산</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin:12px 0;">
+        <tr style="background:#252540; color:#aaa;">
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">항목</th>
+          <th style="padding:8px 12px; text-align:left; border:1px solid #333;">계산식</th>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333;">매수 비용</td>
+          <td style="padding:8px 12px; border:1px solid #333;">매수가 × (1 + 수수료율) × 수량</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333;">매도 수입</td>
+          <td style="padding:8px 12px; border:1px solid #333;">매도가 × (1 − 수수료율 − 매도세율) × 수량</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border:1px solid #333;">실질 수익률</td>
+          <td style="padding:8px 12px; border:1px solid #333;">(매도수입 − 매수비용) / 매수비용 × 100%</td>
+        </tr>
+      </table>
+
+      <div style="background:#16162a; border:1px solid #2a4a6e; border-radius:8px; padding:14px 18px; margin:16px 0; font-size:12px; color:#888;">
+        <strong style="color:#f5c842;">⚠ 유의사항</strong><br>
+        이 시뮬레이터는 과거 데이터를 기반으로 한 백테스트 도구입니다. 과거 성과가 미래 수익을 보장하지 않습니다.<br>
+        실제 투자 시에는 시장 상황, 유동성, 슬리피지 등 추가 요인을 반드시 고려하세요.
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</div>
+
+<script>
+// ============================================================
+// 0. 종목 프로필 (Python signal_engine.py STOCK_PROFILES 미러)
+// ============================================================
+const STOCK_PROFILES = {
+  default: {
+    highDistMax: 0.05, ma20SlopeMin: 0.02, volOverheat: 8.0,
+    rsiOptimal: [50, 65], rsiForming: [45, 50],
+    ret20dStrong: 0.15, ret20dMid: 0.10, ret20dWeak: 0.05,
+    takeProfit: 17, stopLoss: 7, cooldown: 3,
+  },
+  large_cap: {
+    highDistMax: 0.07, ma20SlopeMin: 0.01, volOverheat: 6.0,
+    rsiOptimal: [45, 60], rsiForming: [40, 45],
+    ret20dStrong: 0.08, ret20dMid: 0.05, ret20dWeak: 0.03,
+    takeProfit: 10, stopLoss: 10, cooldown: 5,
+  },
+};
+
+// ============================================================
+// 1. XML 파서
+// ============================================================
+function parseXML(text) {
+  text = text.replace(/encoding="EUC-KR"/i, 'encoding="UTF-8"');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  const chartdata = doc.querySelector('chartdata');
+  if (!chartdata) throw new Error('chartdata 요소를 찾을 수 없습니다');
+
+  const symbol = chartdata.getAttribute('symbol') || '';
+  const name = chartdata.getAttribute('name') || symbol;
+  const items = chartdata.querySelectorAll('item');
+  const data = [];
+
+  items.forEach(item => {
+    const parts = item.getAttribute('data').split('|');
+    if (parts.length === 6) {
+      const ds = parts[0];
+      data.push({
+        date: ds.slice(0,4)+'-'+ds.slice(4,6)+'-'+ds.slice(6,8),
+        open: +parts[1], high: +parts[2], low: +parts[3],
+        close: +parts[4], volume: +parts[5],
+      });
+    }
+  });
+
+  data.sort((a,b) => a.date.localeCompare(b.date));
+  return { symbol, name, data };
+}
+
+// ============================================================
+// 2. 기술지표 계산
+// ============================================================
+function calcIndicators(data) {
+  const n = data.length;
+  const close = data.map(d=>d.close);
+
+  // Moving Averages
+  [5,20,60].forEach(w => {
+    for (let i=0;i<n;i++) {
+      if (i < w-1) { data[i]['ma'+w]=null; continue; }
+      let sum=0; for(let j=i-w+1;j<=i;j++) sum+=close[j];
+      data[i]['ma'+w] = sum/w;
+    }
+  });
+
+  // RSI (Wilder)
+  const rsi = new Array(n).fill(null);
+  const period = 14;
+  if (n > period) {
+    let gains=[], losses=[];
+    for (let i=1;i<=period;i++) {
+      const d = close[i]-close[i-1];
+      gains.push(d>0?d:0);
+      losses.push(d<0?-d:0);
+    }
+    let avgGain = gains.reduce((a,b)=>a+b,0)/period;
+    let avgLoss = losses.reduce((a,b)=>a+b,0)/period;
+    rsi[period] = avgLoss===0?100:100-100/(1+avgGain/avgLoss);
+    for (let i=period+1;i<n;i++) {
+      const d = close[i]-close[i-1];
+      avgGain = (avgGain*(period-1)+(d>0?d:0))/period;
+      avgLoss = (avgLoss*(period-1)+(d<0?-d:0))/period;
+      rsi[i] = avgLoss===0?100:100-100/(1+avgGain/avgLoss);
+    }
+  }
+  data.forEach((d,i)=>d.rsi=rsi[i]);
+
+  // Bollinger Bands
+  for (let i=0;i<n;i++) {
+    if (i<19) { data[i].bbMid=null;data[i].bbUpper=null;data[i].bbLower=null;continue; }
+    let sum=0; for(let j=i-19;j<=i;j++) sum+=close[j];
+    const mid = sum/20;
+    let sq=0; for(let j=i-19;j<=i;j++) sq+=(close[j]-mid)**2;
+    const std = Math.sqrt(sq/20);
+    data[i].bbMid=mid; data[i].bbUpper=mid+2*std; data[i].bbLower=mid-2*std;
+  }
+
+  // Volume Ratio
+  for (let i=0;i<n;i++) {
+    if (i<19) { data[i].volRatio=null;data[i].volAvg=null;continue; }
+    let sum=0; for(let j=i-19;j<=i;j++) sum+=data[j].volume;
+    data[i].volAvg=sum/20;
+    data[i].volRatio=data[i].volume/(sum/20);
+  }
+
+  // MACD
+  const ema = (arr,span) => {
+    const k=2/(span+1); const out=[arr[0]];
+    for(let i=1;i<arr.length;i++) out.push(arr[i]*k+out[i-1]*(1-k));
+    return out;
+  };
+  const ema12=ema(close,12), ema26=ema(close,26);
+  const macdLine = ema12.map((v,i)=>v-ema26[i]);
+  const macdSignal = ema(macdLine,9);
+  data.forEach((d,i)=>{
+    d.macd=macdLine[i]; d.macdSignal=macdSignal[i];
+    d.macdHist=macdLine[i]-macdSignal[i];
+  });
+
+  // Candlestick patterns
+  for (let i=1;i<n;i++) {
+    const d=data[i], p=data[i-1];
+    const body=d.close-d.open, bodyAbs=Math.abs(body);
+    const upper=d.high-Math.max(d.open,d.close);
+    const lower=Math.min(d.open,d.close)-d.low;
+    d.isHammer = lower>2*bodyAbs && upper<bodyAbs*0.5 && bodyAbs>0;
+    d.isBullishEngulfing = body>0 && (p.close-p.open)<0 && d.open<=p.close && d.close>=p.open;
+  }
+  data[0].isHammer=false; data[0].isBullishEngulfing=false;
+
+  return data;
+}
+
+// ============================================================
+// 3. 벤포드 법칙
+// ============================================================
+const BENFORD = [0, .301, .176, .125, .097, .079, .067, .058, .051, .046];
+
+function firstDigit(n) {
+  n=Math.abs(n); if(n===0)return 0;
+  while(n<1)n*=10; while(n>=10)n/=10;
+  return Math.floor(n);
+}
+
+function benfordChi2(values) {
+  const digits = values.filter(v=>v!==0).map(firstDigit).filter(d=>d>=1&&d<=9);
+  if (digits.length<5) return 0;
+  const observed = new Array(9).fill(0);
+  digits.forEach(d=>observed[d-1]++);
+  let chi2=0;
+  for(let d=1;d<=9;d++){
+    const exp=BENFORD[d]*digits.length;
+    if(exp>0) chi2+=(observed[d-1]-exp)**2/exp;
+  }
+  return chi2;
+}
+
+function benfordScore(values) {
+  const chi2 = benfordChi2(values);
+  return { score: 1-1/(1+chi2/15), chi2 };
+}
+
+// ============================================================
+// 4-A. 벤포드 일별 이상점수 사전계산 (성능 최적화)
+// ============================================================
+function precomputeBenfordDailyScores(data, benfordWindow) {
+  // 각 일봉마다 벤포드 이상 정도를 미리 계산 → 배열로 반환
+  // score > 0.03 이면 "이상일"로 판정
+  const scores = new Array(data.length).fill(0);
+  for (let idx = benfordWindow; idx < data.length; idx++) {
+    const volSlice = [];
+    for (let j = Math.max(0, idx - benfordWindow); j <= idx; j++) volSlice.push(data[j].volume);
+    const vbs = benfordScore(volSlice);
+    const priceSlice = [];
+    for (let j = Math.max(0, idx - benfordWindow); j <= idx; j++) priceSlice.push(data[j].close);
+    const changes = [];
+    for (let j = 1; j < priceSlice.length; j++) changes.push(Math.abs(priceSlice[j] - priceSlice[j-1]));
+    const pbs = benfordScore(changes.filter(c => c > 0));
+    scores[idx] = (vbs.score + pbs.score) * 0.1; // 0.03 이상이면 이상 판정
+  }
+  return scores;
+}
+
+// ============================================================
+// 4-B. 시그널 엔진 (v7 — 세력 누적 감지)
+// ============================================================
+function calcBuyScore(data, idx, profileName, benfordInfluence, benfordWindow, benfordMinHits, benfordDailyScores) {
+  // ═══════════════════════════════════════════════════════════════
+  // 데이터 기반 매수 스코어링 v3
+  // 3종목 104개 10%+ 상승 직전 패턴 분석 결과:
+  //   - 상승의 64%는 RSI<50(과매도)에서 시작
+  //   - 상승의 87%는 직전 5일 수익이 음(-)
+  //   - 상승의 65%는 정배열 없이 시작
+  //   - 상승의 71%는 음봉날 시작
+  //   - 평균 BB위치 29%, 평균 RSI 43.5
+  // → 전략: 과매도 반등 + 추세 추종 듀얼 엔진
+  // ═══════════════════════════════════════════════════════════════
+  if (idx<60) return {score:0, details:{}};
+  const row=data[idx], prev=data[idx-1];
+  const details = {};
+  const ma5=row.ma5, ma20=row.ma20, ma60=row.ma60;
+  if (ma5==null||ma20==null||ma60==null) return {score:0,details:{}};
+
+  // ── 절대 차단 (극단 상황만) ──
+  if (row.volRatio!=null && row.volRatio>10) return {score:0,details:{}}; // 극단 과열
+  if (row.rsi!=null && row.rsi>85) return {score:0,details:{}}; // 극단 과매수
+
+  let score = 0;
+
+  // ══════ PATTERN A: 과매도 반등 매수 (데이터: 상승의 64%) ══════
+  // RSI 과매도 감지 (평균 상승시작 RSI=43.5)
+  if (row.rsi!=null) {
+    if (row.rsi<25) { score+=3.5; details['rsi']='극과매도('+row.rsi.toFixed(0)+')'; }
+    else if (row.rsi<35) { score+=3; details['rsi']='과매도('+row.rsi.toFixed(0)+')'; }
+    else if (row.rsi<45) { score+=2; details['rsi']='약과매도('+row.rsi.toFixed(0)+')'; }
+    else if (row.rsi<55) { score+=1; details['rsi']='중립('+row.rsi.toFixed(0)+')'; }
+    else if (row.rsi<65) { score+=0.5; details['rsi']='모멘텀('+row.rsi.toFixed(0)+')'; }
+    else if (row.rsi<80) { details['rsi']='강세('+row.rsi.toFixed(0)+')'; }
+    else { score-=1; details['rsi']='과매수('+row.rsi.toFixed(0)+')'; }
+  }
+
+  // BB 위치 (평균 상승시작 BB=29%)
+  if (row.bbMid!=null && row.bbUpper!=null && row.bbLower!=null) {
+    const bbRange = row.bbUpper - row.bbLower;
+    const bbPos = bbRange > 0 ? (row.close - row.bbLower) / bbRange : 0.5;
+    if (bbPos<0.15) { score+=2.5; details['bb']='BB하단돌파('+Math.round(bbPos*100)+'%)'; }
+    else if (bbPos<0.30) { score+=2; details['bb']='BB하단('+Math.round(bbPos*100)+'%)'; }
+    else if (bbPos<0.45) { score+=1; details['bb']='BB하위('+Math.round(bbPos*100)+'%)'; }
+    else if (bbPos>0.85) { score-=0.5; details['bb']='BB상단('+Math.round(bbPos*100)+'%)'; }
+  }
+
+  // 최근 하락 (평균 상승 직전 5일수익 = -4.9%)
+  if (idx>=5) {
+    const ret5 = (row.close - data[idx-5].close) / data[idx-5].close;
+    if (ret5<-0.08) { score+=2.5; details['dip']='급락반등('+Math.round(ret5*100)+'%)'; }
+    else if (ret5<-0.04) { score+=2; details['dip']='하락반등('+Math.round(ret5*100)+'%)'; }
+    else if (ret5<-0.01) { score+=1; details['dip']='조정반등('+Math.round(ret5*100)+'%)'; }
+  }
+
+  // 연속하락 후 첫 양봉 (강력한 반전 신호)
+  let consecDown = 0;
+  for (let lb=1; lb<10 && idx-lb>=0; lb++) {
+    if (data[idx-lb].close < data[idx-lb].open) consecDown++; else break;
+  }
+  if (consecDown>=3 && row.close>row.open) {
+    score += 2; details['reversal'] = consecDown+'음봉후양봉';
+  } else if (consecDown>=2 && row.close>row.open) {
+    score += 1.5; details['reversal'] = consecDown+'음봉후양봉';
+  } else if (row.close>row.open && prev.close<prev.open) {
+    score += 0.5; details['reversal'] = '반전양봉';
+  }
+
+  // 20일 저점 근접 (바닥 포착)
+  let low20 = Infinity;
+  for (let j=Math.max(0,idx-20);j<=idx;j++) if(data[j].low<low20) low20=data[j].low;
+  if (low20<Infinity) {
+    const distLow = (row.close - low20) / low20;
+    if (distLow<0.02) { score+=1.5; details['low']='20일저점근접'; }
+    else if (distLow<0.05) { score+=0.8; details['low']='저점부근'; }
+  }
+
+  // MA20 대비 이격 (평균회귀)
+  const gapMA20 = (row.close - ma20) / ma20;
+  if (gapMA20<-0.08) { score+=1.5; details['mean']='MA20-8%이격'; }
+  else if (gapMA20<-0.04) { score+=1; details['mean']='MA20-4%이격'; }
+
+  // ══════ PATTERN B: 추세 추종 매수 (데이터: 상승의 35%) ══════
+  if (ma5>ma20 && ma20>ma60) { score+=2; details['align']='정배열'; }
+  else if (ma5>ma20) { score+=0.8; details['align']='단기정렬'; }
+
+  // MA20 기울기
+  if (idx>=10) {
+    const ma20_10 = data[idx-10].ma20;
+    if (ma20_10!=null && ma20_10>0) {
+      const slope = (ma20-ma20_10)/ma20_10;
+      if (slope>0.03) { score+=1.5; details['slope']='MA20급등↑'; }
+      else if (slope>0.01) { score+=1; details['slope']='MA20↑'; }
+      else if (slope>0) { score+=0.3; }
+    }
+  }
+
+  // 20일 고점 근접
+  let high20=0;
+  for (let j=Math.max(0,idx-20);j<=idx;j++) if(data[j].high>high20) high20=data[j].high;
+  if (high20>0 && (high20-row.close)/high20<0.03) {
+    score+=1; details['high']='신고가근접';
+  }
+
+  // ══════ 공통 시그널 ══════
+  // MACD
+  if (row.macdHist!=null && row.macdHist>0) {
+    score+=0.8;
+    if (prev.macdHist!=null && prev.macdHist<=0) { score+=1.5; details['macd']='MACD골든크로스'; }
+    else if (prev.macdHist!=null && row.macdHist>prev.macdHist) { score+=0.3; details['macd']='MACD가속'; }
+    else { details['macd']='MACD양전'; }
+  }
+
+  // 거래량 (정상~약간 높음이 이상적, 평균 1.06x)
+  if (row.volRatio!=null) {
+    if (row.volRatio>=1.2 && row.volRatio<=3) { score+=1; details['vol']='거래량(x'+row.volRatio.toFixed(1)+')'; }
+    else if (row.volRatio>3 && row.volRatio<=6) { score+=0.3; details['vol']='높은거래량'; }
+    else if (row.volRatio>6) { score-=0.5; details['vol']='과열주의'; }
+  }
+
+  // 양봉
+  if (row.close>row.open) score+=0.5;
+
+  // 상승장악형 캔들
+  if (row.isBullishEngulfing) { score+=1; details['candle']='상승장악형'; }
+
+  // ══════ 리스크 감점 ══════
+  // 5일 급등 후 (이미 많이 올랐으면 감점)
+  if (idx>=5) {
+    const ret5 = (row.close - data[idx-5].close) / data[idx-5].close;
+    if (ret5>0.15) { score-=1.5; details['risk']='5일급등주의'; }
+  }
+
+  // ══════ 벤포드 세력 감지 ══════
+  const maxInfluence = (benfordInfluence || 15) / 100;
+  const bw = benfordWindow || 30;
+  const minHits = benfordMinHits || 3;
+  let bmult = 1.0;
+
+  if (maxInfluence > 0 && benfordDailyScores) {
+    let hitCount = 0, totalStr = 0;
+    for (let d = 0; d < bw && (idx - d) >= 0; d++) {
+      const ds = benfordDailyScores[idx - d];
+      if (ds > 0.03) { hitCount++; totalStr += ds; }
+    }
+    if (hitCount >= minHits) {
+      const hr = hitCount / bw;
+      const as = totalStr / hitCount;
+      bmult = 1 + Math.min(hr * as * 5, maxInfluence);
+      if (hitCount >= minHits * 2) bmult *= 1.05;
+      details['benford'] = '세력'+hitCount+'/'+bw+'일(x'+bmult.toFixed(2)+')';
+    }
+  }
+
+  return { score: score * bmult, details };
+}
+
+// ============================================================
+// 5. 백테스터
+// ============================================================
+function runBacktest(data, params) {
+  const { takeProfit, stopLoss, cooldown, benfordWindow, profileName, benfordInfluence, startIdx, benfordMinHits, _benfordDailyScores, commissionRate, taxRate, quantity } = params;
+  const trades = [];
+  let lastBuyIdx = -cooldown;
+  const beginIdx = Math.max(60, startIdx || 60);
+  const comm = (commissionRate || 0) / 100; // 매수/매도 수수료율 (예: 0.015% → 0.00015)
+  const tax = (taxRate || 0) / 100; // 매도 세금율 (예: 0.18% → 0.0018)
+  const qty = quantity || 10; // 거래 수량 (기본 10주)
+
+  // 벤포드 일별 점수 사전계산 (외부에서 전달받거나 직접 계산)
+  const maxInfl = (benfordInfluence || 15) / 100;
+  const benfordDailyScores = _benfordDailyScores || (maxInfl > 0 ? precomputeBenfordDailyScores(data, benfordWindow) : null);
+
+  for (let idx=beginIdx; idx<data.length; idx++) {
+    if (idx-lastBuyIdx < cooldown) continue;
+    const { score, details } = calcBuyScore(data, idx, profileName, benfordInfluence, benfordWindow, benfordMinHits, benfordDailyScores);
+    if (score < 5.0) continue;
+
+    const entry = data[idx];
+    const entryPrice = entry.close;
+    const targetPrice = entryPrice * (1 + takeProfit);
+    const stopPrice = entryPrice * (1 - stopLoss);
+
+    let result = null, exitIdx = null, exitPrice = null, exitReason = '';
+
+    for (let j = idx + 1; j < data.length; j++) {
+      const day = data[j];
+
+      const hitStop = day.low <= stopPrice;
+      const hitTarget = day.high >= targetPrice;
+
+      if (hitTarget && hitStop) {
+        // 같은 날 두 가격 모두 도달 → 시가 기준 판단
+        if (day.open <= stopPrice) {
+          result = 'LOSS'; exitPrice = stopPrice; exitReason = '손절';
+        } else if (day.open >= targetPrice) {
+          result = 'WIN'; exitPrice = targetPrice; exitReason = '익절';
+        } else {
+          // 보수적 판단: 손절 우선
+          result = 'LOSS'; exitPrice = stopPrice; exitReason = '손절';
+        }
+        exitIdx = j;
+        break;
+      } else if (hitTarget) {
+        result = 'WIN'; exitPrice = targetPrice; exitIdx = j; exitReason = '익절';
+        break;
+      } else if (hitStop) {
+        result = 'LOSS'; exitPrice = stopPrice; exitIdx = j; exitReason = '손절';
+        break;
+      }
+    }
+
+    if (!result) { result = 'OPEN'; exitIdx = data.length - 1; exitPrice = data[data.length - 1].close; exitReason = '진행중'; }
+
+    const holdDays = Math.round((new Date(data[exitIdx].date) - new Date(entry.date)) / 86400000);
+    // 수수료 반영 수익률: 매수비용 = 매수가×(1+수수료), 매도수입 = 매도가×(1-수수료-세금)
+    const buyCost = entryPrice * (1 + comm);
+    const sellRevenue = exitPrice * (1 - comm - tax);
+    const retPct = (sellRevenue - buyCost) / buyCost * 100;
+    // 수수료 반영된 WIN/LOSS 재판정
+    if (result !== 'OPEN') result = retPct >= 0 ? 'WIN' : 'LOSS';
+
+    // 매도 근거에 추가 정보
+    const exitDetails = { ...details };
+    exitDetails['exit'] = exitReason;
+
+    trades.push({
+      entryIdx: idx, exitIdx, entryDate: entry.date, exitDate: data[exitIdx].date,
+      entryPrice: entryPrice, exitPrice: Math.round(exitPrice),
+      targetPrice: Math.round(targetPrice), stopPrice: Math.round(stopPrice),
+      score: Math.round(score * 10) / 10, details: exitDetails, result,
+      returnPct: Math.round(retPct * 100) / 100, holdingDays: holdDays,
+      exitReason, quantity: qty,
+    });
+    lastBuyIdx = idx;
+  }
+  return trades;
+}
+
+function summarize(trades) {
+  const wins=trades.filter(t=>t.result==='WIN');
+  const losses=trades.filter(t=>t.result==='LOSS');
+  const opens=trades.filter(t=>t.result==='OPEN');
+  const closed=[...wins,...losses];
+  const winRate = closed.length?wins.length/closed.length*100:0;
+  const avgRet = closed.length?closed.reduce((s,t)=>s+t.returnPct,0)/closed.length:0;
+  let cumRet=1; closed.sort((a,b)=>a.entryDate.localeCompare(b.entryDate)).forEach(t=>cumRet*=(1+t.returnPct/100));
+  const avgHold = closed.length?closed.reduce((s,t)=>s+t.holdingDays,0)/closed.length:0;
+
+  // 거래 수량 반영 수익금 계산 (수수료 반영: returnPct에 이미 포함)
+  let totalProfit = 0;
+  let totalInvested = 0;
+  closed.sort((a,b)=>a.entryDate.localeCompare(b.entryDate)).forEach(t => {
+    const qty = t.quantity || 10;
+    t._shares = qty;
+    t._invested = t.entryPrice * qty;
+    t._profit = Math.round(t.entryPrice * qty * t.returnPct / 100);
+    totalProfit += t._profit;
+    totalInvested += t._invested;
+  });
+  opens.forEach(t => {
+    const qty = t.quantity || 10;
+    t._shares = qty;
+    t._invested = t.entryPrice * qty;
+    t._profit = Math.round(t.entryPrice * qty * t.returnPct / 100);
+  });
+
+  return {
+    total:trades.length, wins:wins.length, losses:losses.length, opens:opens.length,
+    closed:closed.length, winRate:Math.round(winRate*10)/10,
+    avgReturn:Math.round(avgRet*100)/100,
+    cumReturn:Math.round((cumRet-1)*10000)/100,
+    avgHolding:Math.round(avgHold),
+    totalProfit, totalInvested,
+    avgProfit: closed.length ? Math.round(totalProfit / closed.length) : 0,
+    compoundProfit: closed.length ? Math.round((totalInvested / closed.length) * (cumRet - 1)) : 0,
+  };
+}
+
+// ============================================================
+// 6. 차트 렌더링 (UX 개선: 마커 토글 + 거래 줌)
+// ============================================================
+let mainChart=null, volChart=null, candleSeries=null;
+let currentData=null, currentTrades=null, selectedTradeIdx=null;
+
+function renderChart(data, trades) {
+  currentData = data;
+  currentTrades = trades;
+  selectedTradeIdx = null;
+
+  const cc=document.getElementById('chartContainer');
+  const vc=document.getElementById('volumeContainer');
+  cc.innerHTML=''; vc.innerHTML='';
+
+  // Main chart
+  mainChart = LightweightCharts.createChart(cc, {
+    width:cc.clientWidth, height:480,
+    layout:{background:{color:'#1a1a2e'},textColor:'#d1d4dc'},
+    grid:{vertLines:{color:'#252540'},horzLines:{color:'#252540'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    rightPriceScale:{borderColor:'#252540'},
+    timeScale:{borderColor:'#252540',timeVisible:false},
+  });
+
+  // Candlestick
+  candleSeries = mainChart.addCandlestickSeries({
+    upColor:'#ef5350', downColor:'#26a69a',
+    borderUpColor:'#ef5350', borderDownColor:'#26a69a',
+    wickUpColor:'#ef5350', wickDownColor:'#26a69a',
+  });
+  candleSeries.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})));
+
+  // MA lines
+  const addMA=(key,color)=>{
+    const s=mainChart.addLineSeries({color,lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+    s.setData(data.filter(d=>d[key]!=null).map(d=>({time:d.date,value:d[key]})));
+  };
+  addMA('ma5','#f5c842');
+  addMA('ma20','#2196f3');
+  addMA('ma60','#e040fb');
+
+  // 초기: 마커 없이 깔끔한 차트
+  candleSeries.setMarkers([]);
+
+  // Volume chart
+  volChart = LightweightCharts.createChart(vc, {
+    width:vc.clientWidth, height:120,
+    layout:{background:{color:'#1a1a2e'},textColor:'#d1d4dc'},
+    grid:{vertLines:{color:'#252540'},horzLines:{color:'#252540'}},
+    rightPriceScale:{borderColor:'#252540'},
+    timeScale:{borderColor:'#252540',timeVisible:false,visible:true},
+  });
+
+  const vs = volChart.addHistogramSeries({
+    priceFormat:{type:'volume'},
+    priceLineVisible:false, lastValueVisible:false,
+  });
+  vs.setData(data.map(d=>({
+    time:d.date, value:d.volume,
+    color: d.close>=d.open?'rgba(239,83,80,0.4)':'rgba(38,166,154,0.4)',
+  })));
+
+  // Sync time scales
+  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+    if(range) volChart.timeScale().setVisibleLogicalRange(range);
+  });
+  volChart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+    if(range) mainChart.timeScale().setVisibleLogicalRange(range);
+  });
+
+  // Resize
+  const resize=()=>{
+    mainChart.applyOptions({width:cc.clientWidth});
+    volChart.applyOptions({width:vc.clientWidth});
+  };
+  window.addEventListener('resize',resize);
+}
+
+function buildMarkers(tradeIndices) {
+  // tradeIndices: 표시할 거래 인덱스 배열 (null이면 전체)
+  const trades = currentTrades;
+  if (!trades) return [];
+  const indices = tradeIndices || trades.map((_,i)=>i);
+  const markers = [];
+  indices.forEach(i => {
+    const t = trades[i];
+    if (!t) return;
+    markers.push({
+      time: t.entryDate,
+      position: 'belowBar',
+      color: '#ffeb3b',
+      shape: 'arrowUp',
+      text: `#${i+1} 매수 ${t.score}점`,
+    });
+    markers.push({
+      time: t.exitDate,
+      position: 'aboveBar',
+      color: t.result==='WIN'?'#ff5252':t.result==='LOSS'?'#26a69a':'#ffc107',
+      shape: 'arrowDown',
+      text: t.result==='WIN'?`#${i+1} 익절+${t.returnPct.toFixed(0)}%`
+           :t.result==='LOSS'?`#${i+1} 손절${t.returnPct.toFixed(0)}%`
+           :`#${i+1} 진행중`,
+    });
+  });
+  markers.sort((a,b)=>a.time.localeCompare(b.time));
+  return markers;
+}
+
+function showAllMarkers() {
+  if (!candleSeries || !currentTrades) return;
+  candleSeries.setMarkers(buildMarkers(null));
+  document.getElementById('btnShowAll').classList.add('active');
+}
+
+function clearMarkers() {
+  if (!candleSeries) return;
+  candleSeries.setMarkers([]);
+  selectedTradeIdx = null;
+  document.getElementById('btnShowAll').classList.remove('active');
+  // 선택 해제
+  document.querySelectorAll('.trade-selected').forEach(el=>el.classList.remove('trade-selected'));
+  // 전체 범위로 리셋
+  if (mainChart) mainChart.timeScale().fitContent();
+}
+
+function zoomToTrade(idx) {
+  if (!currentTrades || !currentData || !mainChart) return;
+  const t = currentTrades[idx];
+  if (!t) return;
+
+  // 매수일 -30일 ~ 매도일 +15일
+  const entryDataIdx = t.entryIdx;
+  const exitDataIdx = t.exitIdx;
+  const fromIdx = Math.max(0, entryDataIdx - 30);
+  const toIdx = Math.min(currentData.length - 1, exitDataIdx + 15);
+
+  const fromDate = currentData[fromIdx].date;
+  const toDate = currentData[toIdx].date;
+
+  mainChart.timeScale().setVisibleRange({
+    from: fromDate,
+    to: toDate,
+  });
+}
+
+function handleTradeRowClick(idx) {
+  const rows = document.querySelectorAll('#tradeBody tr');
+
+  if (selectedTradeIdx === idx) {
+    // 재클릭: 해제
+    clearMarkers();
+    return;
+  }
+
+  // 기존 선택 해제
+  rows.forEach(r => r.classList.remove('trade-selected'));
+  document.getElementById('btnShowAll').classList.remove('active');
+
+  // 새 선택
+  selectedTradeIdx = idx;
+  if (rows[idx]) rows[idx].classList.add('trade-selected');
+
+  // 해당 거래 마커만 표시
+  candleSeries.setMarkers(buildMarkers([idx]));
+
+  // 차트 줌
+  zoomToTrade(idx);
+}
+
+// ============================================================
+// 7. UI 렌더링
+// ============================================================
+function renderStats(summary, stockInfo) {
+  let infoHtml = `<strong>${stockInfo.name}</strong> (${stockInfo.symbol}) &nbsp;|&nbsp; ` +
+    `${stockInfo.data[0].date} ~ ${stockInfo.data[stockInfo.data.length-1].date} &nbsp;|&nbsp; ` +
+    `${stockInfo.data.length.toLocaleString()}거래일`;
+  if (summary.rangeLabel && summary.rangeLabel !== '전체 기간') {
+    infoHtml += `<br><span style="color:#f5c842; font-size:13px;">분석 구간: ${summary.rangeLabel}</span>`;
+  }
+  document.getElementById('stockInfo').innerHTML = infoHtml;
+
+  const grid = document.getElementById('statsGrid');
+  const fmtWon = (v) => {
+    const abs = Math.abs(v);
+    if (abs >= 100000000) return (v/100000000).toFixed(1)+'억원';
+    if (abs >= 10000) return Math.round(v/10000).toLocaleString()+'만원';
+    return v.toLocaleString()+'원';
+  };
+  const items = [
+    {label:'총 시그널', value:summary.total+'건'},
+    {label:'승리', value:summary.wins+'건', cls:'win'},
+    {label:'패배', value:summary.losses+'건', cls:'loss'},
+    {label:'승률', value:summary.winRate+'%'},
+    {label:'매수 총액', value:fmtWon(summary.totalInvested),
+     tip:'모든 매수 시그널에서 투자한 금액의 합계 (매수가 × 수량)'},
+    {label:'잔여 총액', value:fmtWon(summary.totalInvested + summary.totalProfit),
+     cls:(summary.totalInvested + summary.totalProfit) >= summary.totalInvested ? 'text-green' : 'text-red',
+     tip:'매수 총액 + 총 수익금. 실제로 손에 남는 금액'},
+    {label:'총 수익금', value:(summary.totalProfit>=0?'+':'')+fmtWon(summary.totalProfit),
+     cls:summary.totalProfit>=0?'text-green':'text-red', hl:true,
+     tip:'시그널당 설정 수량만큼 매매했을 때 모든 완료 거래의 수익금 합계'},
+    {label:'평균 수익률', value:(summary.avgReturn>=0?'+':'')+summary.avgReturn+'%',
+     cls:summary.avgReturn>=0?'text-green':'text-red', hl:true},
+    {label:'평균 보유기간', value:summary.avgHolding+'일'},
+    {label:'수익금 재투자시 수익률', value:(summary.cumReturn>=0?'+':'')+summary.cumReturn+'%',
+     cls:summary.cumReturn>=0?'text-green':'text-red',
+     tip:'각 거래의 수익을 다음 거래에 재투자했을 때의 누적 복리 수익률'},
+    {label:'수익금 재투자시 총 수익금', value:(summary.compoundProfit>=0?'+':'')+fmtWon(summary.compoundProfit),
+     cls:summary.compoundProfit>=0?'text-green':'text-red',
+     tip:'거래당 평균 투자금을 기준으로 복리 재투자했을 때의 총 수익금'},
+  ];
+  grid.innerHTML = items.map(it=>{
+    const cls = it.hl?'stat-box highlight':'stat-box';
+    const tipHtml = it.tip ? `<span class="tooltip-wrap" style="position:absolute;top:8px;right:8px;"><span class="tooltip-icon" style="font-size:10px;width:14px;height:14px;">?</span><span class="tooltip-content" style="width:280px;right:0;left:auto;transform:none;">${it.tip}</span></span>` : '';
+    return `<div class="${cls}" style="position:relative;">${tipHtml}<div class="label">${it.label}</div><div class="value ${it.cls||''}">${it.value}</div></div>`;
+  }).join('');
+}
+
+function renderTrades(trades) {
+  const body = document.getElementById('tradeBody');
+  const fmtWon = (v) => {
+    const abs = Math.abs(v);
+    if (abs >= 100000000) return (v/100000000).toFixed(1)+'억';
+    if (abs >= 10000) return (v>=0?'+':'')+Math.round(v/10000).toLocaleString()+'만';
+    return (v>=0?'+':'')+v.toLocaleString()+'원';
+  };
+  body.innerHTML = trades.map((t,i)=>{
+    const badge = t.result==='WIN'?'badge-win':t.result==='LOSS'?'badge-loss':'badge-open';
+    const label = t.result==='WIN'?'승':t.result==='LOSS'?'패':'진행';
+    const retCls = t.returnPct>=0?'text-green':'text-red';
+    const profitCls = (t._profit||0)>=0?'text-green':'text-red';
+    const reasons = Object.values(t.details).join(', ');
+    const profit = t._profit || 0;
+    const exitReasonCls = t.exitReason && t.exitReason.includes('익절') ? 'text-green' : t.exitReason && t.exitReason.includes('손절') ? 'text-red' : '';
+    const maxGainInfo = t.details && t.details.maxGain ? ` (${t.details.maxGain})` : '';
+    const qty = t._shares || t.quantity || 10;
+    const invested = t._invested || (t.entryPrice * qty);
+    const fmtInvested = invested >= 100000000 ? (invested/100000000).toFixed(1)+'억' : invested >= 10000 ? Math.round(invested/10000).toLocaleString()+'만' : invested.toLocaleString()+'원';
+    return `<tr data-trade-idx="${i}" onclick="handleTradeRowClick(${i})">
+      <td>${i+1}</td>
+      <td><span class="badge ${badge}">${label}</span></td>
+      <td>${t.entryDate}</td>
+      <td>${t.entryPrice.toLocaleString()}원</td>
+      <td>${qty}주</td>
+      <td>${fmtInvested}</td>
+      <td>${t.exitDate}</td>
+      <td>${t.exitPrice.toLocaleString()}원</td>
+      <td class="${retCls}">${t.returnPct>=0?'+':''}${t.returnPct}%</td>
+      <td class="${profitCls}" style="font-weight:600">${fmtWon(profit)}</td>
+      <td>${t.holdingDays}일</td>
+      <td class="${exitReasonCls}" style="font-size:11px;">${t.exitReason||'-'}${maxGainInfo}</td>
+      <td>${t.score}</td>
+      <td class="reason-cell"><span class="trade-reason-tip"><span class="tip-icon">ℹ</span><span class="tip-pop">${reasons}</span></span></td>
+      <td class="spacer-td"></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// 8. 모드 전환 & 자동 추천
+// ============================================================
+let currentMode = 'auto'; // 'manual' or 'auto'
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeManual').classList.toggle('active', mode==='manual');
+  document.getElementById('modeAuto').classList.toggle('active', mode==='auto');
+  document.getElementById('autoInfo').style.display = mode==='auto' ? 'block' : 'none';
+
+  // 자동모드 전환 + 이미 데이터 로드됨 → 즉시 최적화 실행
+  if (mode === 'auto' && stockData) {
+    document.getElementById('recommendBanner').innerHTML =
+      `<div class="rec-title rec-title-loading">자동 최적화 진행 중...</div><div class="rec-detail" style="color:#888;">6개 파라미터 조합 탐색 중입니다. 잠시만 기다려주세요.</div>`;
+    document.getElementById('recommendBanner').classList.add('active');
+    document.getElementById('globalOptToast').classList.add('active');
+    setTimeout(() => {
+      try {
+        const detection = autoDetectProfile(stockData.data);
+        const si = getAnalysisStartIdx(stockData.data.length);
+        const optResult = autoOptimize(stockData.data, detection.profileName, si);
+        if (optResult) {
+          applyBestStrategy(detection.profileName, optResult);
+        }
+        showRecommendBanner(detection, optResult);
+      } catch(err) {
+        console.error('자동 최적화 오류:', err);
+        const detection = autoDetectProfile(stockData.data);
+        showRecommendBanner(detection, null);
+      }
+    }, 30);
+  } else if (mode === 'manual' && stockData) {
+    // 수동모드로 전환 시 프로필 기본값 복원
+    const detection = autoDetectProfile(stockData.data);
+    const profile = STOCK_PROFILES[detection.profileName];
+    applyRecommendation(detection.profileName, profile.takeProfit/100, profile.stopLoss/100, profile.cooldown, 30, 15, 3);
+    showRecommendBanner(detection, null);
+  }
+}
+
+function analyzeVolatility(data) {
+  // 일간 수익률의 표준편차로 변동성 측정
+  const returns = [];
+  for (let i=1; i<data.length; i++) {
+    returns.push(Math.abs(data[i].close - data[i-1].close) / data[i-1].close);
+  }
+  const avg = returns.reduce((a,b)=>a+b,0) / returns.length;
+  const variance = returns.reduce((a,r)=>a+(r-avg)**2, 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+
+  // 평균 가격대
+  const avgPrice = data.reduce((a,d)=>a+d.close, 0) / data.length;
+
+  // 20일 ATR (Average True Range)
+  let atrSum = 0, atrCount = 0;
+  for (let i=1; i<data.length; i++) {
+    const tr = Math.max(
+      data[i].high - data[i].low,
+      Math.abs(data[i].high - data[i-1].close),
+      Math.abs(data[i].low - data[i-1].close)
+    );
+    atrSum += tr / data[i-1].close; // % 기준
+    atrCount++;
+  }
+  const avgATR = atrSum / atrCount;
+
+  return { avgReturn: avg, stdDev, avgPrice, avgATR };
+}
+
+function autoDetectProfile(data) {
+  const vol = analyzeVolatility(data);
+  // 대형주 판별: 낮은 변동성 + 높은 가격대
+  // 일평균 ATR이 2.5% 미만이면 대형주로 판별
+  const isLargeCap = vol.avgATR < 0.025;
+  return {
+    profileName: isLargeCap ? 'large_cap' : 'default',
+    isLargeCap,
+    volatility: vol,
+  };
+}
+
+function getAnalysisStartIdx(dataLen) {
+  const rangeVal = parseInt(document.getElementById('analysisRange').value) || 0;
+  if (rangeVal > 0 && rangeVal < dataLen) return Math.max(60, dataLen - rangeVal);
+  return 60;
+}
+
+function autoOptimize(data, profileName, rangeStartIdx) {
+  const idata = calcIndicators(JSON.parse(JSON.stringify(data)));
+  const totalLen = idata.length;
+  const commRate = parseFloat(document.getElementById('commissionRate').value) || 0;
+  const taxR = parseFloat(document.getElementById('taxRate').value) || 0;
+
+  // ── 워크포워드: 훈련 구간 / 테스트 구간 분리 ──
+  // 항상 최근 120거래일(6개월)을 테스트 구간으로 사용
+  // → 파라미터 검증 + 투자 매력도 + 추천 전략 모두 동일 기간
+  const WF_TEST_DAYS = 120;
+  let trainEnd, testStart;
+  testStart = Math.max(60, totalLen - WF_TEST_DAYS);
+  trainEnd = testStart;
+  const trainStartIdx = 60; // 기술지표 최소 60일 필요
+
+  // 차트 변동성 기반으로 탐색 범위를 동적으로 결정
+  const vol = analyzeVolatility(data);
+  const dailyVol = vol.avgATR * 100; // % 단위
+
+  // 변동성에 따라 탐색 범위 세분화 (승률 80%+ 목표: 낮은 익절 포함)
+  let tpRange, slRange, volLabel;
+  if (dailyVol < 1.5) {
+    volLabel = '초저변동(일평균<1.5%)';
+    tpRange = [0.02, 0.03, 0.04, 0.06, 0.08, 0.10];
+    slRange = [0.03, 0.05, 0.07, 0.10];
+  } else if (dailyVol < 2.5) {
+    volLabel = '저변동(일평균<2.5%)';
+    tpRange = [0.03, 0.04, 0.06, 0.08, 0.10, 0.13];
+    slRange = [0.04, 0.06, 0.08, 0.10];
+  } else if (dailyVol < 4.0) {
+    volLabel = '중변동(일평균<4%)';
+    tpRange = [0.04, 0.06, 0.08, 0.10, 0.15, 0.21];
+    slRange = [0.05, 0.07, 0.10, 0.13];
+  } else {
+    volLabel = '고변동(일평균≥4%)';
+    tpRange = [0.05, 0.08, 0.10, 0.15, 0.21, 0.30];
+    slRange = [0.07, 0.10, 0.13, 0.15];
+  }
+  const cdRange = [2, 3, 5, 7];
+  const bwRange = [15, 20, 30, 45];
+  const biRange = [5, 10, 15, 20, 25];
+  const bmhRange = [2, 3, 5]; // 세력 최소 감지횟수
+
+  let best = null;
+  let bestProfit = null;
+  let totalCombos = 0;
+  let validCombos = 0;
+
+  // ── STEP1: 훈련 구간에서 최적 파라미터 탐색 ──
+  const trainData = idata.slice(0, trainEnd);
+
+  // 벤포드 일별점수 사전계산 캐시 (bw별 1회만 계산 → 대규모 성능 개선)
+  const benfordCache = {};
+  for (const bw of bwRange) {
+    benfordCache[bw] = precomputeBenfordDailyScores(trainData, bw);
+  }
+
+  for (const tp of tpRange) {
+    for (const sl of slRange) {
+      for (const cd of cdRange) {
+        for (const bw of bwRange) {
+          for (const bi of biRange) {
+            for (const bmh of bmhRange) {
+              totalCombos++;
+              const trades = runBacktest(trainData, {
+                takeProfit:tp, stopLoss:sl, cooldown:cd,
+                benfordWindow:bw, profileName, benfordInfluence:bi,
+                startIdx: trainStartIdx,
+                benfordMinHits:bmh,
+                _benfordDailyScores: benfordCache[bw],
+                commissionRate:commRate, taxRate:taxR
+              });
+              const s = summarize(trades);
+              if (s.closed < 3) continue;
+              validCombos++;
+
+              // 스코어링: 승률 극대화 (80%+ 목표)
+              // 승률 80%+ 강력 보너스, 70%+ 일반, 60% 미만 패널티
+              const winScore = s.winRate >= 80 ? s.winRate * 0.8
+                             : s.winRate >= 70 ? s.winRate * 0.55
+                             : s.winRate * 0.3;
+              const cumScore = Math.max(0, Math.min(s.cumReturn / 200, 1)) * 15;
+              const avgRetScore = Math.max(0, Math.min((s.avgReturn + 5) / 15, 1)) * 5;
+              const tradeScore = Math.min(s.closed / 8, 1) * 10;
+              // 승률 60% 미만 강력 패널티
+              const winPenalty = s.winRate < 50 ? -30 : (s.winRate < 60 ? -15 : 0);
+              const score = winScore + cumScore + avgRetScore + tradeScore + winPenalty;
+
+              const candidate = {
+                score, tp, sl, cd, bw, bi, bmh,
+                  winRate: s.winRate, trades: s.closed,
+                  cumReturn: s.cumReturn, avgReturn: s.avgReturn,
+                  wins: s.wins, losses: s.losses,
+                };
+
+              // 안정형: 승률 극대화 (기존 로직 그대로)
+              if (!best || score > best.score) {
+                best = candidate;
+              }
+
+              // 수익형: 평균수익률 극대화
+              const pScore = s.avgReturn * 5 + Math.min(Math.max(s.cumReturn, 0), 200) * 0.05 + Math.min(s.closed / 5, 1) * 3 + (s.winRate < 35 ? -30 : 0);
+              if (!bestProfit || pScore > bestProfit._profitScore) {
+                bestProfit = { ...candidate, _profitScore: pScore };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ── STEP2: 테스트 구간에서 최적 파라미터로 순수 평가 ──
+  if (best) {
+    const testTrades = runBacktest(idata, {
+      takeProfit: best.tp, stopLoss: best.sl, cooldown: best.cd,
+      benfordWindow: best.bw, profileName, benfordInfluence: best.bi,
+      startIdx: testStart,
+      benfordMinHits: best.bmh,
+      commissionRate:commRate, taxRate:taxR
+    });
+    const testSummary = summarize(testTrades);
+
+    best.totalCombos = totalCombos;
+    best.validCombos = validCombos;
+    best.volLabel = volLabel;
+    best.dailyVol = dailyVol;
+
+    // 훈련/테스트 기간 정보
+    best.trainPeriod = `${idata[trainStartIdx].date} ~ ${idata[trainEnd-1].date} (${trainEnd - trainStartIdx}일)`;
+    best.testPeriod = `${idata[testStart].date} ~ ${idata[totalLen-1].date} (${totalLen - testStart}일)`;
+    best.trainLabel = '훈련';
+    best.testLabel = '테스트(미래)';
+
+    // 테스트 구간 결과 (과적합 아닌 실전 성과 추정)
+    best.testWinRate = testSummary.winRate;
+    best.testTrades = testSummary.closed;
+    best.testCumReturn = testSummary.cumReturn;
+    best.testAvgReturn = testSummary.avgReturn;
+    best.testWins = testSummary.wins;
+    best.testLosses = testSummary.losses;
+
+    // 프로필 기본값과 비교
+    const defaultProfile = STOCK_PROFILES[profileName];
+    best.defaultTP = defaultProfile.takeProfit / 100;
+    best.defaultSL = defaultProfile.stopLoss / 100;
+    best.defaultCD = defaultProfile.cooldown;
+
+    // 수익형 전략 첨부 + 테스트 구간 평가
+    if (bestProfit) {
+      const profitTestTrades = runBacktest(idata, {
+        takeProfit: bestProfit.tp, stopLoss: bestProfit.sl, cooldown: bestProfit.cd,
+        benfordWindow: bestProfit.bw, profileName, benfordInfluence: bestProfit.bi,
+        startIdx: testStart,
+        benfordMinHits: bestProfit.bmh,
+        commissionRate:commRate, taxRate:taxR
+      });
+      const profitTestSummary = summarize(profitTestTrades);
+      bestProfit.testWinRate = profitTestSummary.winRate;
+      bestProfit.testTrades = profitTestSummary.closed;
+      bestProfit.testCumReturn = profitTestSummary.cumReturn;
+      bestProfit.testAvgReturn = profitTestSummary.avgReturn;
+      best.profitBest = bestProfit;
+    }
+
+    // 테스트 = 평가 (120일로 통일되었으므로 별도 eval 불필요)
+    best.evalWinRate = best.testWinRate;
+    best.evalTrades = best.testTrades;
+    best.evalAvgReturn = best.testAvgReturn;
+    best.evalCumReturn = best.testCumReturn;
+    best.evalPeriod = best.testPeriod;
+    if (bestProfit) {
+      bestProfit.evalWinRate = bestProfit.testWinRate;
+      bestProfit.evalTrades = bestProfit.testTrades;
+      bestProfit.evalAvgReturn = bestProfit.testAvgReturn;
+      bestProfit.evalCumReturn = bestProfit.testCumReturn;
+    }
+  }
+  return best;
+}
+
+function applyBestStrategy(profileName, optResult) {
+  const pb = optResult.profitBest;
+  let usePb = false;
+  if (pb) {
+    const stableRet = optResult.evalTrades > 0 ? optResult.evalAvgReturn :
+                      optResult.testTrades > 0 ? optResult.testAvgReturn : optResult.avgReturn;
+    const profitRet = pb.evalTrades > 0 ? pb.evalAvgReturn :
+                      pb.testTrades > 0 ? pb.testAvgReturn : pb.avgReturn;
+    const profitWR = pb.evalTrades > 0 ? pb.evalWinRate :
+                     pb.testTrades > 0 ? pb.testWinRate : pb.winRate;
+    if (profitRet > stableRet + 1 && profitWR >= 40) usePb = true;
+  }
+  const p = usePb ? pb : optResult;
+  applyRecommendation(profileName, p.tp, p.sl, p.cd, p.bw, p.bi, p.bmh || 3);
+}
+
+function applyRecommendation(profileName, tp, sl, cd, bw, bi, bmh) {
+  document.getElementById('stockProfile').value = profileName;
+  document.getElementById('takeProfit').value = Math.round(tp * 100);
+  document.getElementById('stopLoss').value = Math.round(sl * 100);
+  document.getElementById('cooldown').value = cd;
+  if (bw != null) document.getElementById('benfordWindow').value = bw;
+  if (bi != null) document.getElementById('benfordInfluence').value = bi;
+  if (bmh != null) document.getElementById('benfordMinHits').value = bmh;
+}
+
+function calcInvestmentScore(data, optResult) {
+  const scores = { strategy: 0, signal: 0, profit: 0, trend: 0, confidence: 0 };
+
+  // 1) 전략 승률 (30점) — 30% 워크포워드 평가 우선, 없으면 훈련
+  const wr = (optResult.evalTrades > 0) ? optResult.evalWinRate :
+             (optResult.testTrades > 0) ? optResult.testWinRate : optResult.winRate;
+  scores.strategy = Math.round(Math.min(Math.max(wr / 100 * 30, 0), 30));
+
+  // 2) 현재 매수 스코어 (25점) — 마지막 날짜
+  if (data && data.length > 60) {
+    const lastIdx = data.length - 1;
+    const bds = precomputeBenfordDailyScores(data, optResult.bw || 30);
+    const buyResult = calcBuyScore(data, lastIdx, null, optResult.bi || 15, optResult.bw || 30, optResult.bmh || 3, bds);
+    const buyScore = typeof buyResult === 'object' ? buyResult.score : buyResult;
+    scores.signal = Math.round(Math.min(Math.max(buyScore / 10 * 25, 0), 25));
+  }
+
+  // 3) 수익성 (20점) — 30% 워크포워드 평균수익률 (-5%→0, 0%→10, +5%→20)
+  const avgRet = (optResult.evalTrades > 0) ? optResult.evalAvgReturn :
+                 (optResult.testTrades > 0) ? optResult.testAvgReturn : optResult.avgReturn;
+  scores.profit = Math.round(Math.min(Math.max((avgRet + 5) / 10 * 20, 0), 20));
+
+  // 4) 추세 건전성 (15점) — MA정배열, RSI, MACD
+  if (data && data.length > 60) {
+    const last = data[data.length - 1];
+    if (last.ma5 > last.ma20 && last.ma20 > last.ma60) scores.trend += 5;
+    else if (last.ma5 > last.ma20) scores.trend += 2;
+    if (last.rsi != null && last.rsi >= 30 && last.rsi <= 60) scores.trend += 5;
+    else if (last.rsi != null && last.rsi > 60 && last.rsi <= 70) scores.trend += 3;
+    if (last.macdHist != null && last.macdHist > 0) scores.trend += 5;
+    else if (last.macdHist != null && last.macd > last.macdSignal) scores.trend += 2;
+  }
+
+  // 5) 통계 신뢰도 (10점) — 30% 워크포워드 거래수
+  const evalN = optResult.evalTrades || optResult.testTrades || 0;
+  scores.confidence = Math.round(Math.min(evalN / 5 * 10, 10));
+
+  const total = scores.strategy + scores.signal + scores.profit + scores.trend + scores.confidence;
+  let grade, gradeColor;
+  if (total >= 80) { grade = '매수 적극 추천'; gradeColor = '#4caf50'; }
+  else if (total >= 60) { grade = '매수 검토'; gradeColor = '#f5c842'; }
+  else if (total >= 40) { grade = '관망 추천'; gradeColor = '#ff9800'; }
+  else { grade = '투자 부적합'; gradeColor = '#ef5350'; }
+
+  return { total, grade, gradeColor, scores };
+}
+
+function showRecommendBanner(detection, optResult) {
+  document.getElementById('globalOptToast').classList.remove('active');
+  const banner = document.getElementById('recommendBanner');
+  const typeLabel = detection.isLargeCap ? '대형 우량주' : '중소형 성장주';
+  const vol = detection.volatility;
+
+  const sName = stockData ? stockData.name : '';
+  const sCode = stockData ? stockData.symbol : '';
+  let html = `<div style="font-size:18px; font-weight:800; color:#f5c842; margin-bottom:6px;">${sName} <span style="font-size:13px; font-weight:500; color:#888;">(${sCode})</span> <span style="font-size:14px; font-weight:600; color:#ccc;">주가 특성 자동 분석 완료</span></div>`;
+  html += `<div class="rec-detail">`;
+  html += `일평균 변동폭: <span class="rec-highlight">${(vol.avgATR*100).toFixed(2)}%</span> `;
+  html += `→ <span class="rec-highlight">${typeLabel}</span>로 판별`;
+
+  if (optResult) {
+    // 최적화 과정 로그
+    html += `<div style="margin-top:10px; padding:10px 12px; background:#12122a; border:1px solid #252540; border-radius:6px; font-size:12px; line-height:1.8;">`;
+    html += `<div style="color:#5b9bd5; font-weight:600; margin-bottom:4px;">최적화 분석 리포트</div>`;
+
+    // Step 1: 변동성 분석
+    html += `<div style="color:#888;">STEP 1. 변동성 분석</div>`;
+    html += `<div style="margin-left:12px;">`;
+    html += `일평균 ATR: <span style="color:#f5c842;">${optResult.dailyVol.toFixed(2)}%</span> → `;
+    html += `변동성 등급: <span style="color:#f5c842;">${optResult.volLabel}</span>`;
+    html += `</div>`;
+
+    // Step 2: 탐색 범위
+    html += `<div style="color:#888; margin-top:4px;">STEP 2. 최적 파라미터 탐색</div>`;
+    html += `<div style="margin-left:12px;">`;
+    const validPct = optResult.totalCombos > 0 ? Math.round(optResult.validCombos / optResult.totalCombos * 100) : 0;
+    html += `익절/손절/쿨다운 등 <span style="color:#f5c842;">${optResult.totalCombos.toLocaleString()}가지</span> 설정을 시뮬레이션하여 최적값을 선정`;
+    if (validPct < 100) {
+      html += ` (유효 ${validPct}%)`;
+    }
+    html += `</div>`;
+
+    // Step 3: 기본값 vs 최적값 비교
+    html += `<div style="color:#888; margin-top:4px;">STEP 3. 기본값 → 최적값 변경 내역</div>`;
+    html += `<div style="margin-left:12px;">`;
+    const changes = [];
+    if (optResult.defaultTP !== optResult.tp)
+      changes.push(`익절: ${(optResult.defaultTP*100).toFixed(0)}% → <span style="color:#4caf50;">${(optResult.tp*100).toFixed(0)}%</span>`);
+    else
+      changes.push(`익절: ${(optResult.tp*100).toFixed(0)}% (변경없음)`);
+    if (optResult.defaultSL !== optResult.sl)
+      changes.push(`손절: ${(optResult.defaultSL*100).toFixed(0)}% → <span style="color:#4caf50;">${(optResult.sl*100).toFixed(0)}%</span>`);
+    else
+      changes.push(`손절: ${(optResult.sl*100).toFixed(0)}% (변경없음)`);
+    if (optResult.defaultCD !== optResult.cd)
+      changes.push(`쿨다운: ${optResult.defaultCD}일 → <span style="color:#4caf50;">${optResult.cd}일</span>`);
+    else
+      changes.push(`쿨다운: ${optResult.cd}일 (변경없음)`);
+    changes.push(`벤포드윈도우: <span style="color:#4caf50;">${optResult.bw}일</span>`);
+    changes.push(`벤포드영향도: <span style="color:#4caf50;">${optResult.bi}%</span>`);
+    changes.push(`세력최소감지: <span style="color:#4caf50;">${optResult.bmh||3}회</span>`);
+    html += changes.join(' / ');
+    html += `</div>`;
+
+    // Step 4: 투자 매력도 평가 + 테스트 구간
+    const hasTest = optResult.testTrades != null;
+    const evalPeriodLabel = optResult.testPeriod || '';
+    html += `<div style="color:#888; margin-top:4px;">STEP 4. 투자 매력도 평가 <span style="font-size:10px; color:#555;" title="최근 6개월(120거래일) 성과를 기반으로 현 시점 투자 매력도를 평가합니다.">(${evalPeriodLabel})</span></div>`;
+    html += `<div style="margin-left:12px;">`;
+
+    // 투자 매력도 점수 계산 (지표 계산된 데이터 필요)
+    let scoreData = null;
+    if (stockData && stockData.data && stockData.data.length > 60) {
+      scoreData = calcIndicators(JSON.parse(JSON.stringify(stockData.data)));
+    }
+    const invScore = calcInvestmentScore(scoreData, optResult);
+    const barItems = [
+      { label: '전략 승률', score: invScore.scores.strategy, max: 30,
+        tipTitle: '전략 승률이란?',
+        tipBody: '과거 데이터의 뒤 30%를 <strong>미래라고 가정</strong>하고, 최적화된 전략이 실제로 얼마나 맞췄는지 측정한 승률입니다.',
+        tipExample: '승률 100% → 30점, 50% → 15점, 0% → 0점',
+        tipRecommend: '높을수록 전략이 다양한 시장 상황에서 잘 작동함을 의미' },
+      { label: '매수 스코어', score: invScore.scores.signal, max: 25,
+        tipTitle: '매수 스코어란?',
+        tipBody: '<strong>오늘(마지막 거래일)</strong> 기준으로 매수 시그널이 얼마나 강한지 측정합니다.<br><br>• 패턴A: 과매도 후 반등 감지<br>• 패턴B: 상승 추세 추종<br>• 벤포드: 세력 매집 흔적 감지',
+        tipExample: '스코어 10+ → 25점, 5 → 12점, 0 → 0점',
+        tipRecommend: '0점이면 지금은 매수 타이밍이 아님' },
+      { label: '수익성', score: invScore.scores.profit, max: 20,
+        tipTitle: '수익성이란?',
+        tipBody: '테스트 구간에서 <strong>거래당 평균 수익률</strong>입니다. 한 번 사고 팔 때 평균적으로 얼마를 벌었는지를 나타냅니다.',
+        tipExample: '+5% → 20점, 0% → 10점, -5% → 0점',
+        tipRecommend: '10점 이상이면 수익 기대치가 양수' },
+      { label: '추세 건전성', score: invScore.scores.trend, max: 15,
+        tipTitle: '추세 건전성이란?',
+        tipBody: '현재 주가의 <strong>기술적 지표 상태</strong>를 3가지로 평가합니다 (각 5점):<br><br>• <strong>MA 정배열</strong>: 단기>중기>장기 이동평균 = 상승 추세<br>• <strong>RSI 적정대</strong>: 30~60 사이 = 과매수/과매도 아닌 안정권<br>• <strong>MACD 양전환</strong>: 히스토그램 양수 = 상승 모멘텀',
+        tipExample: '3개 모두 충족 → 15점, 0개 → 0점',
+        tipRecommend: '0점이면 현재 하락 추세이거나 과열 상태' },
+      { label: '통계 신뢰도', score: invScore.scores.confidence, max: 10,
+        tipTitle: '통계 신뢰도란?',
+        tipBody: '테스트 구간에서 발생한 <strong>거래 건수</strong>입니다. 거래가 많을수록 승률과 수익성 수치를 더 신뢰할 수 있습니다.',
+        tipExample: '5건+ → 10점, 3건 → 6점, 1건 → 2점',
+        tipRecommend: '2건 이하면 통계적 의미가 약함 — 참고 수준' },
+    ];
+
+    // 점수 박스
+    html += `<div style="display:flex; align-items:center; gap:20px; background:#16162a; border:1px solid ${invScore.gradeColor}44; border-radius:10px; padding:16px 20px; margin:8px 0;">`;
+    // 왼쪽: 큰 점수
+    html += `<div style="text-align:center; min-width:90px;">`;
+    html += `<div style="font-size:40px; font-weight:800; color:${invScore.gradeColor}; line-height:1;">${invScore.total}</div>`;
+    html += `<div style="font-size:11px; color:#888; margin-top:2px;">/ 100점</div>`;
+    html += `<div style="font-size:13px; font-weight:700; color:${invScore.gradeColor}; margin-top:4px;">${invScore.grade}</div>`;
+    html += `</div>`;
+    // 오른쪽: 항목별 바
+    html += `<div style="flex:1;">`;
+    for (const item of barItems) {
+      const pct = item.max > 0 ? Math.round(item.score / item.max * 100) : 0;
+      const barColor = pct >= 70 ? '#4caf50' : (pct >= 40 ? '#f5c842' : '#ef5350');
+      html += `<div style="display:flex; align-items:center; gap:8px; margin:3px 0; font-size:11px;">`;
+      html += `<div style="width:85px; color:#999; text-align:right; white-space:nowrap;">`;
+      html += `${item.label} `;
+      html += `<span class="tooltip-wrap"><span class="tooltip-icon" style="width:13px;height:13px;font-size:8px;">?</span>`;
+      html += `<span class="tooltip-content">`;
+      html += `<div class="tip-title">${item.tipTitle}</div>`;
+      html += `${item.tipBody}`;
+      html += `<div class="tip-example">${item.tipExample}</div>`;
+      html += `<div class="tip-recommend">${item.tipRecommend}</div>`;
+      html += `</span></span></div>`;
+      html += `<div style="flex:1; background:#1a1a2e; border-radius:3px; height:10px; overflow:hidden;">`;
+      html += `<div style="width:${pct}%; height:100%; background:${barColor}; border-radius:3px; transition:width 0.3s;"></div>`;
+      html += `</div>`;
+      html += `<div style="width:40px; color:#aaa; font-size:10px;">${item.score}/${item.max}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+    html += `</div>`;
+
+    // 평가 기간 요약 (점수 박스 아래)
+    if (hasTest && optResult.testTrades > 0) {
+      const avgRetColor = optResult.testAvgReturn >= 0 ? '#4caf50' : '#ef5350';
+      html += `<div style="font-size:11px; color:#888; margin-top:4px;">`;
+      html += `평가구간 ${optResult.testPeriod||''}: `;
+      html += `<span style="color:${optResult.testWinRate>=50?'#4caf50':'#ef5350'};">승률 ${optResult.testWinRate.toFixed(0)}%</span>`;
+      html += ` · ${optResult.testTrades}건 거래`;
+      html += ` · <span style="color:${avgRetColor};">평균수익률 ${optResult.testAvgReturn>=0?'+':''}${optResult.testAvgReturn.toFixed(2)}%</span>`;
+      html += `</div>`;
+    } else if (hasTest && optResult.testTrades === 0) {
+      html += `<div style="color:#f5c842; margin-top:4px; font-size:11px;">⚠ 평가 기간에 매수 시그널 없음</div>`;
+    }
+    html += `</div>`;
+
+    // Step 5: 추천 전략 선택 (자동 추천 + 유저 변경 가능)
+    const pb = optResult.profitBest;
+    // 추천 판단: 30% 워크포워드 평가 기준 비교
+    let recommend = 'stable';
+    let recommendReason = '';
+    // 비교용 지표 (eval 우선 → test → train fallback)
+    const stableWR = optResult.evalTrades > 0 ? optResult.evalWinRate :
+                     optResult.testTrades > 0 ? optResult.testWinRate : optResult.winRate;
+    const stableRet = optResult.evalTrades > 0 ? optResult.evalAvgReturn :
+                      optResult.testTrades > 0 ? optResult.testAvgReturn : optResult.avgReturn;
+    const stableN = optResult.evalTrades || optResult.testTrades || 0;
+    let profitWR = 0, profitRet = 0, profitN = 0;
+    if (pb) {
+      profitWR = pb.evalTrades > 0 ? pb.evalWinRate :
+                 pb.testTrades > 0 ? pb.testWinRate : pb.winRate;
+      profitRet = pb.evalTrades > 0 ? pb.evalAvgReturn :
+                  pb.testTrades > 0 ? pb.testAvgReturn : pb.avgReturn;
+      profitN = pb.evalTrades || pb.testTrades || 0;
+      if (profitRet > stableRet + 1 && profitWR >= 40) {
+        recommend = 'profit';
+        recommendReason = `수익형이 수익률에서 유리 (${profitRet>=0?'+':''}${profitRet.toFixed(1)}% vs ${stableRet>=0?'+':''}${stableRet.toFixed(1)}%)`;
+      } else if (stableWR >= profitWR + 10) {
+        recommendReason = `안정형이 승률에서 유리 (${stableWR.toFixed(0)}% vs ${profitWR.toFixed(0)}%)`;
+      } else if (stableWR >= 70) {
+        recommendReason = `안정형 승률 ${stableWR.toFixed(0)}%로 안정적 매매 가능`;
+      } else {
+        recommendReason = `안정형이 승률-수익 균형에서 유리`;
+      }
+    }
+
+    html += `<div style="color:#888; margin-top:4px;">STEP 5. 추천 전략 선택</div>`;
+    html += `<div style="margin-left:12px;">`;
+    // 비교 테이블
+    if (pb) {
+      html += `<div style="font-size:10px; color:#555; margin:4px 0 2px;">백테스트 실적 비교 (${evalPeriodLabel})</div>`;
+      html += `<table style="font-size:11px; border-collapse:collapse; width:100%; margin:0 0 8px;">`;
+      html += `<tr style="color:#666;">`;
+      html += `<th style="padding:3px 6px; border-bottom:1px solid #333; text-align:left;">전략</th>`;
+      html += `<th style="padding:3px 6px; border-bottom:1px solid #333;">승률</th>`;
+      html += `<th style="padding:3px 6px; border-bottom:1px solid #333;">거래</th>`;
+      html += `<th style="padding:3px 6px; border-bottom:1px solid #333;">평균수익률</th>`;
+      html += `<th style="padding:3px 6px; border-bottom:1px solid #333;">판정</th>`;
+      html += `</tr>`;
+      const sColor = recommend === 'stable' ? '#5b9bd5' : '#888';
+      const pColor = recommend === 'profit' ? '#e040fb' : '#888';
+      html += `<tr style="color:${sColor};">`;
+      html += `<td style="padding:3px 6px;">안정형</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${stableWR.toFixed(0)}%</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${stableN}건</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${stableRet>=0?'+':''}${stableRet.toFixed(2)}%</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${recommend==='stable'?'✓ 추천':''}</td>`;
+      html += `</tr>`;
+      html += `<tr style="color:${pColor};">`;
+      html += `<td style="padding:3px 6px;">수익형</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${profitWR.toFixed(0)}%</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${profitN}건</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${profitRet>=0?'+':''}${profitRet.toFixed(2)}%</td>`;
+      html += `<td style="padding:3px 6px; text-align:center;">${recommend==='profit'?'✓ 추천':''}</td>`;
+      html += `</tr>`;
+      html += `</table>`;
+      if (recommendReason) {
+        html += `<div style="font-size:11px; color:#aaa; margin:0 0 8px;">→ ${recommendReason}</div>`;
+      }
+    } else if (recommendReason) {
+      html += `<div style="font-size:11px; color:#aaa; margin:4px 0 8px;">${recommendReason}</div>`;
+    }
+    html += `<div style="display:flex; gap:10px;">`;
+    // 안정형 버튼
+    const stableActive = recommend === 'stable';
+    const stableBorder = stableActive ? '#5b9bd5' : '#3a3a5e';
+    const stableColor = stableActive ? '#f5c842' : '#aaa';
+    html += `<button class="btn btn-sm strategy-pick" style="flex:1; padding:10px 12px; background:#1a2a3e; border:2px solid ${stableBorder}; border-radius:8px; color:${stableColor}; font-weight:700; font-size:13px; cursor:pointer; position:relative;" onclick="applyRecommendation('${detection.profileName}',${optResult.tp},${optResult.sl},${optResult.cd},${optResult.bw},${optResult.bi},${optResult.bmh||3}); document.querySelectorAll('.strategy-pick').forEach(b=>{b.style.borderColor='#3a3a5e';b.style.color='#aaa';b.querySelector('.rec-badge')&&(b.querySelector('.rec-badge').style.background='#3a3a5e');}); this.style.borderColor='#5b9bd5'; this.style.color='#f5c842';">`;
+    html += `안정형(승률)`;
+    if (stableActive) html += `<span class="rec-badge" style="position:absolute;top:-8px;right:-8px;background:#5b9bd5;color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;">추천</span>`;
+    html += `</button>`;
+    // 수익형 버튼
+    if (pb) {
+      const profitActive = recommend === 'profit';
+      const profitBorder = profitActive ? '#e040fb' : '#3a3a5e';
+      const profitColor = profitActive ? '#e040fb' : '#aaa';
+      html += `<button class="btn btn-sm strategy-pick" style="flex:1; padding:10px 12px; background:#1a2a3e; border:2px solid ${profitBorder}; border-radius:8px; color:${profitColor}; font-weight:700; font-size:13px; cursor:pointer; position:relative;" onclick="applyRecommendation('${detection.profileName}',${pb.tp},${pb.sl},${pb.cd},${pb.bw},${pb.bi},${pb.bmh||3}); document.querySelectorAll('.strategy-pick').forEach(b=>{b.style.borderColor='#3a3a5e';b.style.color='#aaa';b.querySelector('.rec-badge')&&(b.querySelector('.rec-badge').style.background='#3a3a5e');}); this.style.borderColor='#e040fb'; this.style.color='#e040fb';">`;
+      html += `수익형(수익률)`;
+      if (profitActive) html += `<span class="rec-badge" style="position:absolute;top:-8px;right:-8px;background:#e040fb;color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;">추천</span>`;
+      html += `</button>`;
+    }
+    html += `</div>`;
+    html += `</div>`;
+
+    html += `</div>`; // 로그 박스 닫기
+  }
+  html += `</div>`;
+  html += `<div class="rec-actions">`;
+  if (!optResult) {
+    const defBw = 30, defBi = 15;
+    html += `<button class="btn btn-sm btn-outline active" onclick="applyRecommendation('${detection.profileName}',${detection.isLargeCap?0.10:0.17},${detection.isLargeCap?0.10:0.07},${detection.isLargeCap?5:3},${defBw},${defBi},3)">추천값 적용</button>`;
+  }
+  html += `</div>`;
+
+  banner.innerHTML = html;
+  banner.classList.add('active');
+}
+
+// ============================================================
+// 9. 이벤트 핸들러
+// ============================================================
+let stockData = null;
+
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+
+// 종목명 → 코드 매핑 (주요 종목)
+const STOCK_MAP = {
+  '삼성전자':'005930','삼성전자우':'005935','SK하이닉스':'000660','LG에너지솔루션':'373220',
+  '삼성바이오로직스':'207940','현대차':'005380','기아':'000270','셀트리온':'068270',
+  'KB금융':'105560','신한지주':'055550','POSCO홀딩스':'005490','네이버':'035420',
+  '카카오':'035720','삼성SDI':'006400','LG화학':'051910','현대모비스':'012330',
+  '카카오페이':'377300','카카오뱅크':'323410','크래프톤':'259960','엔씨소프트':'036570',
+  'SK이노베이션':'096770','한화에어로스페이스':'012450','두산에너빌리티':'034020',
+  'LG전자':'066570','삼성물산':'028260','SK텔레콤':'017670','KT':'030200',
+  'LG':'003550','한국전력':'015760','삼성화재':'000810','하나금융지주':'086790',
+  '우리금융지주':'316140','SK':'034730','현대건설':'000720','대한항공':'003490',
+  '한화오션':'042660','HD현대중공업':'329180','HD한국조선해양':'009540',
+  'HLB':'028300','에코프로비엠':'247540','에코프로':'086520','포스코퓨처엠':'003670',
+  '두산밥캣':'241560','한미반도체':'042700','리노공업':'058470','알테오젠':'196170',
+  'SK바이오팜':'326030','펄어비스':'263750','위메이드':'112040','컴투스':'078340',
+  '삼성엔지니어링':'028050','GS건설':'006360','현대제철':'004020',
+};
+
+// 종목코드/종목명 → XML 자동 다운로드 시도
+document.getElementById('fetchBtn').addEventListener('click', generateXmlLink);
+document.getElementById('symbolInput').addEventListener('keydown', e=>{if(e.key==='Enter')generateXmlLink();});
+
+function generateXmlLink() {
+  const input = document.getElementById('symbolInput').value.trim();
+  const resultDiv = document.getElementById('xmlLinkResult');
+  if (!input) { resultDiv.style.display='none'; return; }
+
+  let code = null;
+  let name = null;
+
+  if (/^\d{6}$/.test(input)) {
+    code = input;
+    name = Object.entries(STOCK_MAP).find(([_,v])=>v===input)?.[0] || code;
+  } else {
+    const query = input.toLowerCase();
+    const matches = Object.entries(STOCK_MAP).filter(([k])=>k.toLowerCase().includes(query));
+    if (matches.length === 1) {
+      [name, code] = matches[0];
+    } else if (matches.length > 1) {
+      let html = `<div style="color:#f5c842; margin-bottom:8px;">"${input}" 검색 결과 (${matches.length}건) — 클릭하여 선택:</div>`;
+      html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
+      matches.forEach(([n,c]) => {
+        html += `<span style="background:#252540; padding:4px 10px; border-radius:4px; cursor:pointer; border:1px solid #3a3a5e;" onclick="document.getElementById('symbolInput').value='${c}';generateXmlLink();">${n} (${c})</span>`;
+      });
+      html += `</div>`;
+      resultDiv.innerHTML = html;
+      resultDiv.style.display = 'block';
+      return;
+    } else {
+      resultDiv.innerHTML = `<span style="color:#ef5350;">종목을 찾을 수 없습니다. 6자리 종목코드를 직접 입력해 주세요.</span>`;
+      resultDiv.style.display = 'block';
+      return;
+    }
+  }
+
+  const url = `https://fchart.stock.naver.com/sise.nhn?symbol=${code}&timeframe=day&count=5000&requestType=0`;
+  resultDiv.innerHTML = `<div style="color:#f5c842;">⏳ <strong>${name}</strong> (${code}) 데이터 자동 다운로드 중...</div>`;
+  resultDiv.style.display = 'block';
+
+  // 자동 fetch 시도
+  fetchStockXml(url, code, name, resultDiv);
+}
+
+async function fetchStockXml(url, code, name, resultDiv) {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const buf = await resp.arrayBuffer();
+    // euc-kr 디코딩 시도
+    let text;
+    try { text = new TextDecoder('euc-kr').decode(buf); } catch(e) { text = new TextDecoder('utf-8').decode(buf); }
+
+    // XML 파싱 검증
+    stockData = parseXML(text);
+    if (!stockData || !stockData.data || stockData.data.length === 0) throw new Error('데이터 없음');
+
+    document.getElementById('fileName').textContent =
+      `📄 ${name} (${code}) — ${stockData.data.length}일 자동 로드 완료`;
+    analyzeBtn.disabled = false;
+
+    resultDiv.innerHTML = `<div style="color:#4caf50;"><strong>${name}</strong> (${code}) — ${stockData.data.length}일 데이터 자동 로드 완료!</div>`;
+
+    // 변동성 분석 → 프로필 판별
+    const detection = autoDetectProfile(stockData.data);
+    if (currentMode === 'auto') {
+      document.getElementById('recommendBanner').innerHTML =
+        `<div class="rec-title rec-title-loading">자동 최적화 진행 중...</div><div class="rec-detail" style="color:#888;">6개 파라미터 조합 탐색 중입니다. 잠시만 기다려주세요.</div>`;
+      document.getElementById('recommendBanner').classList.add('active');
+      document.getElementById('globalOptToast').classList.add('active');
+      setTimeout(() => {
+        try {
+          const si = getAnalysisStartIdx(stockData.data.length);
+          const optResult = autoOptimize(stockData.data, detection.profileName, si);
+          if (optResult) {
+            applyBestStrategy(detection.profileName, optResult);
+          }
+          showRecommendBanner(detection, optResult);
+        } catch(err) {
+          console.error('자동 최적화 오류:', err);
+          showRecommendBanner(detection, null);
+        }
+      }, 30);
+    } else {
+      const profile = STOCK_PROFILES[detection.profileName];
+      applyRecommendation(detection.profileName, profile.takeProfit/100, profile.stopLoss/100, profile.cooldown, 30, 15, 3);
+      showRecommendBanner(detection, null);
+    }
+  } catch(err) {
+    // CORS 또는 네트워크 오류 → 링크 안내 폴백
+    const fallbackHtml = `<div style="margin-bottom:6px;"><strong style="color:#5b9bd5;">${name}</strong> <span style="color:#888;">(${code})</span></div>`;
+    let html = fallbackHtml;
+    html += `<div style="color:#f5c842; font-size:12px; margin-bottom:6px;">자동 다운로드 실패 (CORS 제한). 아래 방법으로 진행해 주세요:</div>`;
+    html += `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">`;
+    html += `<button class="btn btn-sm btn-outline" onclick="window.open('${url}','_blank')" style="flex-shrink:0;">새 탭에서 XML 열기</button>`;
+    html += `<button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText('${url}');this.textContent='복사됨!';setTimeout(()=>this.textContent='링크 복사',1500);" style="flex-shrink:0;">링크 복사</button>`;
+    html += `</div>`;
+    html += `<div style="color:#666; font-size:12px; margin-top:6px;">새 탭에서 열린 XML 페이지를 Ctrl+S(Cmd+S)로 저장 후 위에 업로드하세요.</div>`;
+    resultDiv.innerHTML = html;
+  }
+}
+
+uploadArea.addEventListener('click', ()=>fileInput.click());
+uploadArea.addEventListener('dragover', e=>{e.preventDefault();uploadArea.classList.add('dragover');});
+uploadArea.addEventListener('dragleave', ()=>uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e=>{
+  e.preventDefault(); uploadArea.classList.remove('dragover');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+  fileInput.value = ''; // 같은 파일 재업로드 허용
+});
+
+function handleFile(file) {
+  document.getElementById('fileName').textContent = '📄 '+file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const decoder = new TextDecoder('euc-kr');
+      const buf = e.target.result;
+      let text = decoder.decode(buf);
+      try { stockData = parseXML(text); }
+      catch(err) {
+        text = new TextDecoder('utf-8').decode(buf);
+        stockData = parseXML(text);
+      }
+      document.getElementById('fileName').textContent =
+        `📄 ${file.name} — ${stockData.name} (${stockData.symbol}) ${stockData.data.length}일 로드 완료`;
+      analyzeBtn.disabled = false;
+
+      // 변동성 분석 → 프로필 판별
+      const detection = autoDetectProfile(stockData.data);
+
+      if (currentMode === 'auto') {
+        // 자동모드: 즉시 6개 파라미터 최적화 실행
+        document.getElementById('recommendBanner').innerHTML =
+          `<div class="rec-title rec-title-loading">자동 최적화 진행 중...</div><div class="rec-detail" style="color:#888;">6개 파라미터 조합 탐색 중입니다. 잠시만 기다려주세요.</div>`;
+        document.getElementById('recommendBanner').classList.add('active');
+        document.getElementById('globalOptToast').classList.add('active');
+        setTimeout(() => {
+          try {
+            const si = getAnalysisStartIdx(stockData.data.length);
+            const optResult = autoOptimize(stockData.data, detection.profileName, si);
+            if (optResult) {
+              applyBestStrategy(detection.profileName, optResult);
+            }
+            showRecommendBanner(detection, optResult);
+          } catch(err) {
+            console.error('자동 최적화 오류:', err);
+            showRecommendBanner(detection, null);
+          }
+        }, 30);
+      } else {
+        // 수동모드: 프로필 기본값 적용
+        const profile = STOCK_PROFILES[detection.profileName];
+        applyRecommendation(detection.profileName, profile.takeProfit/100, profile.stopLoss/100, profile.cooldown, 30, 15, 3);
+        showRecommendBanner(detection, null);
+      }
+
+    } catch(err) {
+      document.getElementById('fileName').textContent = '❌ 파일 파싱 오류: '+err.message;
+      analyzeBtn.disabled = true;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// 종목 유형 변경 시 파라미터 자동 변경
+document.getElementById('stockProfile').addEventListener('change', function() {
+  const profile = STOCK_PROFILES[this.value];
+  if (profile) {
+    document.getElementById('takeProfit').value = profile.takeProfit;
+    document.getElementById('stopLoss').value = profile.stopLoss;
+    document.getElementById('cooldown').value = profile.cooldown;
+  }
+});
+
+// 차트 컨트롤 버튼
+document.getElementById('btnShowAll').addEventListener('click', showAllMarkers);
+document.getElementById('btnClearChart').addEventListener('click', clearMarkers);
+
+// 분석 실행 (공통)
+function executeAnalysis(tp, sl, cd, profileName) {
+  const bw = parseInt(document.getElementById('benfordWindow').value);
+  const bi = parseInt(document.getElementById('benfordInfluence').value) || 15;
+  const bmh = parseInt(document.getElementById('benfordMinHits').value) || 3;
+  const rangeVal = parseInt(document.getElementById('analysisRange').value) || 0;
+  const commRate = parseFloat(document.getElementById('commissionRate').value) || 0;
+  const taxR = parseFloat(document.getElementById('taxRate').value) || 0;
+  const qty = parseInt(document.getElementById('quantity').value) || 10;
+
+  const data = calcIndicators(JSON.parse(JSON.stringify(stockData.data)));
+
+  // 분석 기간 계산: 0이면 전체, N이면 마지막 N거래일부터
+  let startIdx = 60; // 기본 (기술지표 계산에 최소 60일 필요)
+  let rangeLabel = '전체 기간';
+  if (rangeVal > 0 && rangeVal < data.length) {
+    startIdx = Math.max(60, data.length - rangeVal);
+    rangeLabel = `최근 ${rangeVal}거래일 (${data[startIdx].date} ~ ${data[data.length-1].date})`;
+  }
+
+  const trades = runBacktest(data, {takeProfit:tp,stopLoss:sl,cooldown:cd,benfordWindow:bw,profileName,benfordInfluence:bi,startIdx,benfordMinHits:bmh,commissionRate:commRate,taxRate:taxR,quantity:qty});
+  const summary = summarize(trades);
+  summary.rangeLabel = rangeLabel;
+
+  renderStats(summary, {...stockData, data});
+  renderChart(data, trades);
+  renderTrades(trades);
+}
+
+// 분석 시작
+analyzeBtn.addEventListener('click', ()=>{
+  if(!stockData) return;
+  const loading = document.getElementById('loading');
+  const results = document.getElementById('results');
+  loading.classList.add('active');
+  results.classList.add('hidden');
+
+  setTimeout(()=>{
+    try {
+      // 항상 현재 UI에 표시된 파라미터값으로 분석 실행
+      // (자동 최적화는 데이터 로드 시 또는 모드 전환 시에만 실행됨)
+      document.getElementById('loadingMsg').textContent = '분석 중... 기술지표 계산 및 백테스트 실행';
+      const tp = parseFloat(document.getElementById('takeProfit').value)/100;
+      const sl = parseFloat(document.getElementById('stopLoss').value)/100;
+      const cd = parseInt(document.getElementById('cooldown').value);
+      const profileName = document.getElementById('stockProfile').value;
+      executeAnalysis(tp, sl, cd, profileName);
+
+      loading.classList.remove('active');
+      results.classList.remove('hidden');
+
+      // 차트가 hidden 상태에서 생성되어 width=0 문제 해결
+      requestAnimationFrame(()=>{
+        if(mainChart){
+          const cc=document.getElementById('chartContainer');
+          mainChart.applyOptions({width:cc.clientWidth});
+          mainChart.timeScale().fitContent();
+        }
+        if(volChart){
+          const vc=document.getElementById('volumeContainer');
+          volChart.applyOptions({width:vc.clientWidth});
+        }
+      });
+
+      results.scrollIntoView({behavior:'smooth'});
+    } catch(err) {
+      loading.classList.remove('active');
+      alert('분석 오류: '+err.message+'\n'+err.stack);
+    }
+  }, 50);
+});
+</script>
+</body>
+</html>
