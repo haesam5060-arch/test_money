@@ -1,15 +1,17 @@
 # 주식 백테스트 및 신호 분석 시스템
 
 벤포드 법칙과 기술적 지표를 결합한 한국 주식 매매 신호 생성 및 백테스트 도구입니다.
+분석 결과를 Electron 기반 데스크탑 앱으로 시각화합니다.
 
 ---
 
 ## 주요 기능
 
 - **매수 신호 생성**: 벤포드 법칙 이상 탐지 + RSI, MACD, 볼린저밴드, 거래량 등 기술적 지표 복합 분석
-- **백테스트**: Walk-forward 방식으로 익절(+21%) / 손절(-7%) 시뮬레이션
+- **백테스트**: Walk-forward 방식으로 익절/손절 시뮬레이션
+- **레짐 필터**: 시장 국면(상승/하락/횡보) 감지로 진입 조건 필터링
 - **대규모 최적화**: 192개 KOSPI 종목 대상 파라미터 최적화 (평균 승률 77.7%)
-- **승률 분석**: 종목별 성과 분석 및 시각화 (`index.html`)
+- **데스크탑 대시보드**: Electron 앱으로 백테스트 결과 실시간 시각화
 
 ---
 
@@ -17,40 +19,89 @@
 
 ```
 연구/
+├── main.js                  # Electron 앱 진입점
+├── index.html               # 백테스트 결과 대시보드 (UI)
+├── package.json             # Electron 앱 설정
 ├── main.py                  # 메인 실행 파일 (단일 종목 분석)
 ├── optimize_scoring.py      # 대규모 파라미터 최적화
 ├── analyze_exit_params.py   # 익절/손절 파라미터 분석
 ├── analyze_winners.py       # 고승률 종목 분석
-├── index.html               # 결과 시각화 대시보드
 ├── optimization_report.txt  # 최적화 결과 리포트
 ├── optimization_report.json # 최적화 결과 (JSON)
 ├── modules/
 │   ├── data_parser.py       # XML 주가 데이터 파싱
-│   ├── indicators.py        # 기술적 지표 계산
+│   ├── indicators.py        # 기술적 지표 계산 (RSI, MACD, BB, ATR 등)
 │   ├── signal_engine.py     # 매수 신호 엔진
-│   ├── backtester.py        # 백테스트 엔진
+│   ├── backtester.py        # 백테스트 엔진 (익절/손절/복리 재투자)
+│   ├── regime_filter.py     # 시장 국면 필터
 │   └── benford.py           # 벤포드 법칙 분석
 └── xml/                     # 종목별 주가 데이터 (200개+)
 ```
 
 ---
 
-## 사용 방법
+## 설치 및 실행
 
-### 단일 종목 분석
+### 요구사항
+- Python 3.8+
+- Node.js 18+
+
+### 설치
+```bash
+# Python 의존성 (별도 requirements 없음, 표준 라이브러리 사용)
+
+# Electron 앱 의존성
+npm install
+```
+
+### 앱 실행 (개발 모드)
+```bash
+npm start
+```
+
+### 앱 빌드 (macOS)
+```bash
+npm run build
+# dist/mac-arm64/ 에 .app 파일 생성
+```
+
+---
+
+## Python 분석 사용 방법
+
+### 단일 종목 백테스트
 ```bash
 python main.py xml/005930.xml
 ```
 
-### 파라미터 최적화
+### 파라미터 최적화 (전체 종목)
 ```bash
 python optimize_scoring.py
 ```
 
-### 승률 분석
+### 고승률 종목 분석
 ```bash
 python analyze_winners.py
 ```
+
+---
+
+## 대시보드 통계 카드 설명
+
+| 카드 | 설명 |
+|------|------|
+| 총 시그널 | 분석 기간 내 전체 매수 신호 수 |
+| 승리 | 익절로 종료된 거래 수 |
+| 패배 | 손절로 종료된 거래 수 |
+| 승률 | 완료 거래 중 승리 비율 |
+| 진행 | 현재 보유 중(미종료) 거래 수 |
+| 평균 수익률 | 완료 거래의 거래당 평균 수익률 |
+| 총 수익금 | 전체 완료 거래의 수익금 합계 |
+| 매수 총액 | 투자한 총 금액 |
+| 잔여 총액 | 매수 총액 + 총 수익금 |
+| 평균 보유기간 | 거래당 평균 보유 일수 |
+| 재투자 수익률 | 수익을 복리로 재투자했을 때 누적 수익률 |
+| 재투자 총 수익금 | 복리 재투자 기준 총 수익금 |
 
 ---
 
