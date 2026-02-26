@@ -83,7 +83,7 @@ header p { color:#888; font-size:14px; }
 .btn-outline.active { border-color:#5b9bd5; color:#5b9bd5; background:rgba(91,155,213,.1); }
 
 /* Stats Grid */
-.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.stats-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
 .stat-box { background:#16162a; border:1px solid #252540; border-radius:8px; padding:16px; text-align:center; }
 .stat-box .value { font-size:24px; font-weight:700; margin:4px 0; }
 .stat-box .label { font-size:11px; color:#888; text-transform:uppercase; }
@@ -154,7 +154,7 @@ header p { color:#888; font-size:14px; }
 
 /* Responsive */
 @media(max-width:768px) {
-  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .stats-grid { grid-template-columns:repeat(4,1fr); }
   .params { grid-template-columns:1fr 1fr; }
   header h1 { font-size:22px; }
   .tooltip-content { width:260px; }
@@ -571,6 +571,8 @@ header p { color:#888; font-size:14px; }
           <span style="color:#555; margin:0 8px;">→</span>
           <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#f5c842; font-weight:600;">기술지표 계산</span>
           <span style="color:#555; margin:0 8px;">→</span>
+          <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#ff7043; font-weight:600;">KOSPI 국면 필터</span>
+          <span style="color:#555; margin:0 8px;">→</span>
           <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#4caf50; font-weight:600;">매수 스코어링</span>
           <span style="color:#555; margin:0 8px;">→</span>
           <span style="background:#252540; padding:6px 14px; border-radius:20px; color:#ef5350; font-weight:600;">매도 판정</span>
@@ -757,6 +759,80 @@ header p { color:#888; font-size:14px; }
           <span style="color:#aaa;"><strong style="color:#f5c842;">안정형(승률)</strong>과 <strong style="color:#e040fb;">수익형(수익률)</strong> 두 버튼 중 원하는 전략을 클릭하면 해당 최적 파라미터가 자동 적용됩니다. 이후 "분석 시작"을 누르면 선택한 파라미터로 백테스트가 실행됩니다.</span>
         </div>
       </div>
+
+      <h3 style="color:#ff7043; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">STEP 6. KOSPI 시장 국면 필터 (Option A — 약세 Hard Block)</h3>
+      <p>매수 스코어가 아무리 높아도, <strong style="color:#ff7043;">KOSPI 전체 시장이 약세 국면이면 매수를 차단</strong>합니다. 개별 종목의 단기 반등 신호가 "떨어지는 칼날"일 수 있기 때문입니다.</p>
+
+      <div style="background:#16162a; border:1px solid #3a2a1e; border-radius:8px; padding:14px 18px; margin:14px 0;">
+        <div style="color:#f5c842; font-weight:600; margin-bottom:10px;">검증 근거 — 15종목 × 2013~2026 백테스트</div>
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <tr style="background:#252540; color:#aaa;">
+            <th style="padding:6px 12px; border:1px solid #333;">KOSPI 국면</th>
+            <th style="padding:6px 12px; border:1px solid #333; text-align:center;">거래수</th>
+            <th style="padding:6px 12px; border:1px solid #333; text-align:center;">승률</th>
+            <th style="padding:6px 12px; border:1px solid #333; text-align:center;">평균수익</th>
+            <th style="padding:6px 12px; border:1px solid #333; text-align:center;">누적</th>
+          </tr>
+          <tr>
+            <td style="padding:6px 12px; border:1px solid #333; color:#4caf50; font-weight:600;">강세</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center;">1,048건</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">39.3%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">+2.44%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#4caf50;">양수</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 12px; border:1px solid #333; color:#f5c842;">횡보</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center;">490건</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#f5c842;">38.8%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#f5c842;">+2.31%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#f5c842;">양수</td>
+          </tr>
+          <tr style="background:#2a1a1a;">
+            <td style="padding:6px 12px; border:1px solid #333; color:#ef5350; font-weight:600;">약세 → 차단</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center;">223건</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350; font-weight:600;">27.8%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350; font-weight:600;">-0.33%</td>
+            <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350; font-weight:600;">-85.8%</td>
+          </tr>
+        </table>
+        <div style="font-size:12px; color:#888; margin-top:8px;">
+          → 약세 구간 223건 차단 시: 삼성전자 누적수익 <strong style="color:#4caf50;">+52,260%p 개선</strong>, 카카오페이 누적수익 <strong style="color:#4caf50;">+8.6%p 개선</strong>
+        </div>
+      </div>
+
+      <p style="margin-top:10px;">약세 국면 판정은 KOSPI의 4가지 지표를 합산한 <strong>bad score</strong>로 결정됩니다.</p>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin:12px 0;">
+        <tr style="background:#252540; color:#aaa;">
+          <th style="padding:6px 12px; text-align:left; border:1px solid #333;">판정 조건</th>
+          <th style="padding:6px 12px; text-align:left; border:1px solid #333;">기준</th>
+          <th style="padding:6px 12px; text-align:center; border:1px solid #333;">점수</th>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px; border:1px solid #333;">MA 역배열</td>
+          <td style="padding:6px 12px; border:1px solid #333;">KOSPI MA20 &lt; MA60</td>
+          <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350;">+2</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px; border:1px solid #333;">MA60 하락</td>
+          <td style="padding:6px 12px; border:1px solid #333;">20일 기울기 &lt; -2%</td>
+          <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350;">+2</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px; border:1px solid #333;">60일 수익률 부진</td>
+          <td style="padding:6px 12px; border:1px solid #333;">60일 수익률 &lt; -10%</td>
+          <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350;">+2</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px; border:1px solid #333;">52주 고점 낙폭</td>
+          <td style="padding:6px 12px; border:1px solid #333;">52주 고점 대비 -20% 이하</td>
+          <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350;">+2</td>
+        </tr>
+        <tr style="background:#1a2a1a;">
+          <td style="padding:6px 12px; border:1px solid #333; color:#ef5350; font-weight:600;" colspan="2">합산 5점 이상 → 약세 판정 → 매수 전면 차단</td>
+          <td style="padding:6px 12px; border:1px solid #333; text-align:center; color:#ef5350; font-weight:600;">≥ 5점</td>
+        </tr>
+      </table>
+      <p style="font-size:13px; color:#888; margin-top:4px;">※ 한계: 급락 초기(COVID 폭락 첫 달 등) 후행 지표 특성상 차단이 다소 늦을 수 있습니다. 단, 장기 하락장(2018, 2022 등)은 효과적으로 차단합니다.</p>
 
       <h3 style="color:#5b9bd5; margin:20px 0 12px; font-size:16px; border-bottom:1px solid #2a2a3e; padding-bottom:8px;">핵심 전략 철학</h3>
       <div style="background:#16162a; border:1px solid #252540; border-radius:8px; padding:14px 18px; margin:12px 0; font-size:13px; color:#aaa; line-height:1.8;">
@@ -1465,17 +1541,17 @@ function renderStats(summary, stockInfo) {
     {label:'승리', value:summary.wins+'건', cls:'win'},
     {label:'패배', value:summary.losses+'건', cls:'loss'},
     {label:'승률', value:summary.winRate+'%'},
+    {label:'평균 수익률', value:(summary.avgReturn>=0?'+':'')+summary.avgReturn+'%',
+     cls:summary.avgReturn>=0?'text-green':'text-red', hl:true},
+    {label:'총 수익금', value:(summary.totalProfit>=0?'+':'')+fmtWon(summary.totalProfit),
+     cls:summary.totalProfit>=0?'text-green':'text-red', hl:true,
+     tip:'시그널당 설정 수량만큼 매매했을 때 모든 완료 거래의 수익금 합계'},
     {label:'매수 총액', value:fmtWon(summary.totalInvested),
      tip:'모든 매수 시그널에서 투자한 금액의 합계 (매수가 × 수량)'},
     {label:'잔여 총액', value:fmtWon(summary.totalInvested + summary.totalProfit),
      cls:(summary.totalInvested + summary.totalProfit) >= summary.totalInvested ? 'text-green' : 'text-red',
      tip:'매수 총액 + 총 수익금. 실제로 손에 남는 금액'},
-    {label:'총 수익금', value:(summary.totalProfit>=0?'+':'')+fmtWon(summary.totalProfit),
-     cls:summary.totalProfit>=0?'text-green':'text-red', hl:true,
-     tip:'시그널당 설정 수량만큼 매매했을 때 모든 완료 거래의 수익금 합계'},
-    {label:'평균 수익률', value:(summary.avgReturn>=0?'+':'')+summary.avgReturn+'%',
-     cls:summary.avgReturn>=0?'text-green':'text-red', hl:true},
-    {label:'평균 보유기간', value:summary.avgHolding+'일'},
+    {label:'평균 보유기간', value:summary.avgHolding+'일', span:2},
     {label:'수익금 재투자시 수익률', value:(summary.cumReturn>=0?'+':'')+summary.cumReturn+'%',
      cls:summary.cumReturn>=0?'text-green':'text-red',
      tip:'각 거래의 수익을 다음 거래에 재투자했을 때의 누적 복리 수익률'},
@@ -1485,8 +1561,9 @@ function renderStats(summary, stockInfo) {
   ];
   grid.innerHTML = items.map(it=>{
     const cls = it.hl?'stat-box highlight':'stat-box';
+    const spanStyle = it.span ? `grid-column:span ${it.span};` : '';
     const tipHtml = it.tip ? `<span class="tooltip-wrap" style="position:absolute;top:8px;right:8px;"><span class="tooltip-icon" style="font-size:10px;width:14px;height:14px;">?</span><span class="tooltip-content" style="width:280px;right:0;left:auto;transform:none;">${it.tip}</span></span>` : '';
-    return `<div class="${cls}" style="position:relative;">${tipHtml}<div class="label">${it.label}</div><div class="value ${it.cls||''}">${it.value}</div></div>`;
+    return `<div class="${cls}" style="position:relative;${spanStyle}">${tipHtml}<div class="label">${it.label}</div><div class="value ${it.cls||''}">${it.value}</div></div>`;
   }).join('');
 }
 

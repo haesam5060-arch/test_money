@@ -1,0 +1,30 @@
+{
+  "name": "stock-trading-simulator",
+  "version": "1.0.0",
+  "description": "벤포드 법칙 기반 주식 매매 시뮬레이터",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.kakao.stock-trading-simulator",
+    "productName": "Stock Trading Simulator",
+    "asar": false,
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }]
+    },
+    "files": [
+      "index.html",
+      "main.js"
+    ],
+    "dmg": {
+      "title": "Stock Trading Simulator"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
