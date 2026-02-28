@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 
 
-def calc_moving_averages(df, windows=[5, 20, 60]):
-    """이동평균선 계산"""
+def calc_moving_averages(df, windows=[5, 20, 60, 200]):
+    """이동평균선 계산 (MA200 추가)"""
     for w in windows:
         df[f'ma_{w}'] = df['close'].rolling(window=w).mean()
     return df
@@ -104,6 +104,47 @@ def detect_candle_patterns(df):
     return df
 
 
+def calc_ichimoku(df):
+    """일목균형표 계산 (선행스팬 A/B는 현재 시점 클라우드로 변환)"""
+    high = df['high']
+    low  = df['low']
+
+    # 전환선 (9일)
+    df['ichi_tenkan'] = (high.rolling(9).max() + low.rolling(9).min()) / 2
+    # 기준선 (26일)
+    df['ichi_kijun']  = (high.rolling(26).max() + low.rolling(26).min()) / 2
+    # 선행스팬 A — 26봉 뒤에 표시되므로 shift(26)하면 현재 클라우드 값
+    df['ichi_cloud_a'] = ((df['ichi_tenkan'] + df['ichi_kijun']) / 2).shift(26)
+    # 선행스팬 B — 52일 고저 평균, 26봉 뒤에 표시
+    df['ichi_cloud_b'] = ((high.rolling(52).max() + low.rolling(52).min()) / 2).shift(26)
+
+    return df
+
+
+def calc_atr(df, period=14):
+    """ATR (Average True Range) — Wilder 방식"""
+    high = df['high']
+    low = df['low']
+    prev_close = df['close'].shift(1)
+
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs()
+    ], axis=1).max(axis=1)
+
+    atr = pd.Series(np.nan, index=df.index, dtype=float)
+    # 첫 번째 ATR: SMA
+    if len(df) > period:
+        atr.iloc[period] = tr.iloc[1:period + 1].mean()
+        # Wilder 스무딩
+        for i in range(period + 1, len(df)):
+            atr.iloc[i] = (atr.iloc[i - 1] * (period - 1) + tr.iloc[i]) / period
+
+    df['atr_14'] = atr
+    return df
+
+
 def calc_all_indicators(df):
     """모든 기술지표를 한번에 계산"""
     df = calc_moving_averages(df)
@@ -112,4 +153,6 @@ def calc_all_indicators(df):
     df = calc_volume_ratio(df)
     df = calc_macd(df)
     df = detect_candle_patterns(df)
+    df = calc_ichimoku(df)
+    df = calc_atr(df)
     return df

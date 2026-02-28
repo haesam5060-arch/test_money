@@ -15,8 +15,8 @@ STOCK_PROFILES = {
         'high_dist_max': 0.05,    # 20일 고점 대비 최대 거리 (5%)
         'ma20_slope_min': 0.02,   # MA20 10일 최소 기울기 (2%)
         'vol_overheat': 8.0,      # 거래량 과열 상한 (8배)
-        'rsi_optimal': (50, 65),  # RSI 최적 구간
-        'rsi_forming': (45, 50),  # RSI 모멘텀 형성 구간
+        'rsi_optimal': (70, 85),  # RSI 최적 구간 (데이터 검증: 고RSI = 세력 진행 중)
+        'rsi_forming': (60, 70),  # RSI 모멘텀 형성 구간
         'ret20d_strong': 0.15,    # 20일 수익 강한 모멘텀 (15%)
         'ret20d_mid': 0.10,       # 20일 수익 중간 (10%)
         'ret20d_weak': 0.05,      # 20일 수익 약한 (5%)
@@ -29,8 +29,8 @@ STOCK_PROFILES = {
         'high_dist_max': 0.07,    # 대형주는 고점 대비 7%까지 허용
         'ma20_slope_min': 0.01,   # 대형주는 기울기 1%면 충분
         'vol_overheat': 6.0,      # 대형주는 6배 이상이면 과열
-        'rsi_optimal': (45, 60),  # 대형주는 더 낮은 RSI에서도 건강
-        'rsi_forming': (40, 45),  # 대형주 모멘텀 형성 구간
+        'rsi_optimal': (65, 80),  # 대형주도 고RSI가 세력 진행 확인 신호
+        'rsi_forming': (55, 65),  # 대형주 모멘텀 형성 구간
         'ret20d_strong': 0.08,    # 대형주는 8%면 강한 모멘텀
         'ret20d_mid': 0.05,       # 대형주는 5%가 중간
         'ret20d_weak': 0.03,      # 대형주는 3%도 의미
@@ -43,8 +43,8 @@ STOCK_PROFILES = {
         'high_dist_max': 0.08,    # 고점 대비 8%까지 허용 (매집 초기 포착)
         'ma20_slope_min': 0.01,   # MA20 기울기 완화 (매집 초기는 기울기 약함)
         'vol_overheat': 10.0,     # 거래량 10배까지 허용 (세력 진입시 폭발적 거래량)
-        'rsi_optimal': (45, 70),  # RSI 범위 확대 (세력은 과매수 구간도 밀어붙임)
-        'rsi_forming': (40, 45),  # 모멘텀 형성 구간
+        'rsi_optimal': (70, 90),  # 세력 추종형: 고RSI 구간이 핵심 (극단 모멘텀)
+        'rsi_forming': (60, 70),  # 모멘텀 형성 구간
         'ret20d_strong': 0.12,    # 20일 강한 모멘텀 기준
         'ret20d_mid': 0.07,       # 20일 중간 기준
         'ret20d_weak': 0.03,      # 20일 약한 기준
@@ -61,7 +61,8 @@ def get_profile(profile_name='default'):
     return STOCK_PROFILES.get(profile_name, STOCK_PROFILES['default'])
 
 
-def calculate_buy_score(df, idx, benford_window=30, profile_name='default'):
+def calculate_buy_score(df, idx, benford_window=30, profile_name='default',
+                        benford_influence=0.15, benford_min_hits=5):
     """
     매수 시그널 v6 — 종목 유형별 프로필 지원
 
@@ -131,34 +132,40 @@ def calculate_buy_score(df, idx, benford_window=30, profile_name='default'):
     score = 5.0
     details['core'] = f'정배열,고점{dist_from_high*100:.1f}%,MA20↑{ma20_slope*100:.1f}%'
 
-    # === 1. RSI 구간별 점수 (프로필별) ===
+    # === 1. RSI 모멘텀 점수 (데이터 검증: 고RSI = 세력 진행 = 승률↑) ===
+    # 검증 결과: RSI>70 → 승률 38%, RSI<50 → 승률 18% (역전 확인)
     rsi = row.get('rsi')
-    rsi_lo, rsi_hi = p['rsi_optimal']
-    rsi_form_lo, rsi_form_hi = p['rsi_forming']
     if pd.notna(rsi):
-        if rsi_lo <= rsi <= rsi_hi:
+        if rsi >= 80:
+            score += 2.5
+            details['rsi'] = f'극강모멘텀({rsi:.0f})'   # 세력 강력 진행 중
+        elif rsi >= 70:
             score += 2.0
-            details['rsi'] = f'건강모멘텀({rsi:.0f})'
-        elif rsi_form_lo <= rsi < rsi_lo:
+            details['rsi'] = f'강모멘텀({rsi:.0f})'     # 데이터 최적 구간
+        elif rsi >= 60:
             score += 1.0
-            details['rsi'] = f'모멘텀형성({rsi:.0f})'
-        elif rsi_hi < rsi <= 80:
+            details['rsi'] = f'모멘텀({rsi:.0f})'
+        elif rsi >= 50:
             score += 0.5
-            details['rsi'] = f'강모멘텀({rsi:.0f})'
-        elif rsi > 80:
-            score += 0.0
-            details['rsi'] = f'과매수({rsi:.0f})'
+            details['rsi'] = f'중립모멘텀({rsi:.0f})'
+        elif rsi >= 40:
+            score += 0.0                                 # 중립: 0점
+            details['rsi'] = f'중립({rsi:.0f})'
+        else:
+            score -= 1.0                                 # 하락 모멘텀: 패널티
+            details['rsi'] = f'약세({rsi:.0f})'
 
-    # === 2. MACD 상태 ===
+    # === 2. MACD 상태 (검증: 히스토그램 음의 상관 → 캡 1.0으로 축소) ===
     macd = row.get('macd')
     macd_signal = row.get('macd_signal')
     macd_hist = row.get('macd_hist')
     prev_macd_hist = prev.get('macd_hist')
 
+    _macd_score = 0.0
     if pd.notna(macd_hist) and macd_hist > 0:
-        score += 1.0
+        _macd_score += 1.0
         if pd.notna(prev_macd_hist) and macd_hist > prev_macd_hist:
-            score += 0.5
+            _macd_score += 0.5
             details['macd'] = 'MACD가속'
         else:
             details['macd'] = 'MACD양전'
@@ -167,45 +174,46 @@ def calculate_buy_score(df, idx, benford_window=30, profile_name='default'):
     prev_macd_signal = prev.get('macd_signal')
     if all(pd.notna(v) for v in [macd, macd_signal, prev_macd, prev_macd_signal]):
         if macd > macd_signal and prev_macd <= prev_macd_signal:
-            score += 1.5
+            _macd_score += 1.5
             details['macd'] = 'MACD골든크로스'
 
-    # === 3. 20일 수익률 (프로필별 기준) ===
+    score += min(_macd_score, 1.0)  # 상한 캡: 최대 1.0점 (데이터 검증 결과 축소)
+
+    # === 3. 20일 수익률 (검증: 미미한 기여도 → 축소) ===
     if idx >= 20:
         price_20ago = df.iloc[idx - 20]['close']
         if price_20ago > 0:
             ret_20d = (row['close'] - price_20ago) / price_20ago
             if ret_20d > p['ret20d_strong']:
-                score += 1.5
+                score += 0.5
                 details['ret20d'] = f'+{ret_20d*100:.0f}%'
             elif ret_20d > p['ret20d_mid']:
-                score += 1.0
+                score += 0.3
                 details['ret20d'] = f'+{ret_20d*100:.0f}%'
             elif ret_20d > p['ret20d_weak']:
-                score += 0.5
+                score += 0.2
 
-    # === 4. 거래량 품질 ===
+    # === 4. 거래량 품질 (검증: 높은 거래량 = 승률↓, 대폭 축소) ===
     if pd.notna(vol_ratio):
         if profile_name == 'force_following':
-            # 세력 추종형: 거래량 급증 구간을 적극적으로 선호
             if 3.0 <= vol_ratio <= 7.0:
-                score += 2.0  # 세력 진입 핵심 신호
+                score += 0.5
                 details['volume'] = f'세력거래량(x{vol_ratio:.1f})'
             elif 1.5 <= vol_ratio < 3.0:
-                score += 1.0
+                score += 0.3
                 details['volume'] = f'증가거래량(x{vol_ratio:.1f})'
             elif 7.0 < vol_ratio <= p['vol_overheat']:
-                score += 0.5  # 세력형은 초과열도 긍정 신호
+                score -= 0.5  # 과열 → 패널티
                 details['volume'] = f'폭발거래량(x{vol_ratio:.1f})'
         else:
             if 1.3 <= vol_ratio <= 3.0:
-                score += 1.0
+                score += 0.3
                 details['volume'] = f'건전거래량(x{vol_ratio:.1f})'
             elif 3.0 < vol_ratio <= 5.0:
-                score += 0.5
+                score += 0.0
                 details['volume'] = f'높은거래량(x{vol_ratio:.1f})'
             elif 5.0 < vol_ratio <= p['vol_overheat']:
-                score -= 0.5
+                score -= 1.0  # 과열 강한 패널티 (승률 27%)
                 details['volume'] = f'과열주의(x{vol_ratio:.1f})'
 
     # === 5. 캔들/패턴 ===
@@ -226,46 +234,85 @@ def calculate_buy_score(df, idx, benford_window=30, profile_name='default'):
     elif consec > 5:
         score -= 0.5  # 너무 연속 상승 = 조정 임박
 
-    # === 6. 볼린저밴드 ===
-    bb_mid = row.get('bb_mid')
-    if pd.notna(bb_mid) and row['close'] > bb_mid:
-        score += 0.3
+    # === 6. 볼린저밴드 (검증: 변별력 없음 → 삭제) ===
+    # 필수조건(정배열+양봉+MA20상승) 통과 시 거의 항상 BB중심선 위
+    # bb_mid 체크 제거
 
     # === 7. 20일 신고가 ===
     if row['close'] >= high_20d * 0.99:  # 거의 신고가
         score += 0.5
         details['breakout'] = '20일신고가'
 
-    # === 8. MA60 기울기 (장기 추세 확인) ===
+    # === 8. MA60 기울기 (검증: 승률 상관 유의 → 상향) ===
     if idx >= 20:
         ma60_20ago = df.iloc[idx - 20].get('ma_60')
         if pd.notna(ma60_20ago) and ma60_20ago > 0:
             ma60_slope = (ma60 - ma60_20ago) / ma60_20ago
             if ma60_slope > 0.02:
-                score += 1.0
+                score += 1.5
                 details['long_trend'] = f'MA60도상승(+{ma60_slope*100:.1f}%)'
 
-    # === 9. 벤포드 법칙 ===
-    bw = p.get('benford_weight', 0.10)
+    # === 10. MA200 — 장기 우상향 필터 ===
+    ma200 = row.get('ma_200')
+    if pd.notna(ma200) and ma200 > 0:
+        if row['close'] > ma200:
+            score += 1.5
+            details['ma200'] = f'MA200위(+{(row["close"]/ma200-1)*100:.1f}%)'
+        else:
+            # MA200 아래 = 장기 하락 추세, 강한 패널티
+            score -= 1.5
+            details['ma200'] = f'MA200아래({(row["close"]/ma200-1)*100:.1f}%)'
+
+    # === 11. 일목균형표 (검증: 구름위 = 회귀 기여도 1위 → 대폭 상향) ===
+    tenkan    = row.get('ichi_tenkan')
+    kijun     = row.get('ichi_kijun')
+    cloud_a   = row.get('ichi_cloud_a')
+    cloud_b   = row.get('ichi_cloud_b')
+    if all(pd.notna(v) for v in [tenkan, kijun, cloud_a, cloud_b]):
+        cloud_top = max(cloud_a, cloud_b)
+        cloud_bot = min(cloud_a, cloud_b)
+        close     = row['close']
+        # 가격이 구름 위 → 강한 상승 추세 (기여도 1위)
+        if close > cloud_top:
+            score += 2.0
+            details['ichimoku'] = '구름위'
+        # 가격이 구름 안 → 중립 (보너스 없음)
+        elif close < cloud_bot:
+            score -= 0.5
+            details['ichimoku'] = '구름아래'
+        # 전환선 > 기준선 → 단기 상승 신호
+        if tenkan > kijun:
+            score += 0.5
+            details['ichimoku'] = details.get('ichimoku', '') + '+전환>기준'
+        # 구름 자체가 상승형 (선행A > 선행B)
+        if cloud_a > cloud_b:
+            score += 0.3
+            details['ichimoku'] = details.get('ichimoku', '') + '+상승구름'
+
+    # === 9. 벤포드 법칙 (benford_influence: 최대 승수 비율, benford_min_hits: 최소 데이터) ===
+    # benford_influence: 0.0 ~ 0.5 (0.15 = 최대 15% 스코어 증폭)
+    # benford_min_hits:  벤포드 분석에 필요한 최소 데이터 포인트 (기본 5)
+    bw = min(p.get('benford_weight', 0.10), benford_influence)
     if profile_name == 'force_following':
         # 세력 추종형: 단기(15일) + 장기(60일) 이중 윈도우
         short_w = min(15, benford_window)
         long_w = min(60, idx + 1)
         vol_s, _ = analyze_volume_benford(
-            df['volume'].iloc[max(0, idx - short_w):idx + 1].values, window=short_w)
+            df['volume'].iloc[max(0, idx - short_w):idx + 1].values, window=max(short_w, benford_min_hits))
         vol_l, _ = analyze_volume_benford(
-            df['volume'].iloc[max(0, idx - long_w):idx + 1].values, window=long_w)
+            df['volume'].iloc[max(0, idx - long_w):idx + 1].values, window=max(long_w, benford_min_hits))
         pc_s, _ = analyze_price_change_benford(
-            df['close'].iloc[max(0, idx - short_w):idx + 1].values, window=short_w)
+            df['close'].iloc[max(0, idx - short_w):idx + 1].values, window=max(short_w, benford_min_hits))
         # 단기 이탈도 2배 가중 (최근 세력 흔적 강조)
         combined = (vol_s * 2 + vol_l + pc_s) / 4
         benford_mult = 1.0 + min(combined * bw * 2, bw * 2)
     else:
-        volumes = df['volume'].iloc[max(0, idx - benford_window):idx + 1].values
-        vol_bscore, _ = analyze_volume_benford(volumes, window=benford_window)
-        prices = df['close'].iloc[max(0, idx - benford_window):idx + 1].values
-        pc_bscore, _ = analyze_price_change_benford(prices, window=benford_window)
-        benford_mult = 1.0 + min((vol_bscore + pc_bscore) * 0.1, 0.15)
+        eff_window = max(benford_window, benford_min_hits)
+        volumes = df['volume'].iloc[max(0, idx - eff_window):idx + 1].values
+        vol_bscore, _ = analyze_volume_benford(volumes, window=eff_window)
+        prices = df['close'].iloc[max(0, idx - eff_window):idx + 1].values
+        pc_bscore, _ = analyze_price_change_benford(prices, window=eff_window)
+        benford_mult = 1.0 + min((vol_bscore + pc_bscore) * 0.1, benford_influence)
 
     if benford_mult > 1.03:
         details['benford'] = f'벤포드(x{benford_mult:.2f})'
